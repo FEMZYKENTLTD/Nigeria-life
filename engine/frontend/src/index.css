@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #09090a;
+  --color-coal: #121214;
+  --color-slate: #1a1a1d;
+  --color-line: #29292e;
+  --color-gold: #c6a45c;
+  --color-golddim: #8c7641;
+  --color-bone: #ece7db;
+  --color-mute: #9b968a;
+  --color-ok: #7fae8b;
+  --color-warn: #d2a24c;
+  --color-bad: #c9695e;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-ink); color: var(--color-bone); font-family: var(--font-sans); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; }
+::selection { background: var(--color-gold); color: var(--color-ink); }
+:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+* { scrollbar-color: var(--color-line) transparent; scrollbar-width: thin; }
+input, select, textarea { background: var(--color-ink); border: 1px solid var(--color-line); border-radius: 4px; padding: 7px 10px; color: var(--color-bone); width: 100%; font: inherit; }
+input[type="checkbox"] { width: auto; accent-color: var(--color-gold); }
+input::placeholder, textarea::placeholder { color: #6d695f; }
+label { display: block; font-size: 12px; color: var(--color-mute); margin-bottom: 4px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-mute); padding: 8px 12px; border-bottom: 1px solid var(--color-line); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid #1f1f23; vertical-align: top; overflow-wrap: anywhere; }
+tbody tr:hover td { background: #161618; }
+.num { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

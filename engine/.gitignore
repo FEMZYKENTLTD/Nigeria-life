@@ -1,0 +1,9 @@
+.venv/
+node_modules/
+dist/
+nlie-data/
+__pycache__/
+.pytest_cache/
+*.pyc
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

@@ -1,0 +1,25 @@
+# Live engine, real repository data, 14 Nov 2026
+## Before kill -9
+{'pages': {'imported': 35}, 'features': 98, 'findings': 0, 'evidence': 29, 'questions_open': 22, 'screenshots': 0, 'sources': 1, 'tasks': {'done': 1}}
+inserted a task in state 'running' to stand in for work in progress
+## Server process killed with SIGKILL (pkill -9), then started again on the same data folder
+## After restart (project still paused, as it was left)
+ task 2 queued attempts 1 | Generate evidence register (interrupted mid-run) | Recovered after interruption; will run again.
+ task 1 done attempts 1 | Read the repository's research index and investigation log, then import existing research | 
+ counts {'pages': {'imported': 35}, 'features': 98, 'findings': 0, 'evidence': 29, 'questions_open': 22, 'screenshots': 0, 'sources': 1, 'tasks': {'done': 1, 'queued': 1}}
+## After resume
+ task 2 done attempts 2 | Generate evidence register (interrupted mid-run) | {'reports': ['/home/user/Nigeria-life/engine/nlie-data/reports/1/evidence_register-20261114T230112.md']}
+ task 1 done attempts 1 | Read the repository's research index and investigation log, then import existing research | {'read': ['README.md', '00-investigation-log.md', '12-evidence-register.md', '11-feature-roadmap.md', '02-feature-inventory.md'], 'evidence': 29, 'pages': 35, 'features_created': 98, 'features_updated': 0, 'questions': 22, 'missing_files': []}
+## Activity log (newest first)
+  2026-11-14T23:01:12 info task_done
+  2026-11-14T23:01:12 info report_generated
+  2026-11-14T23:01:11 info project_active
+  2026-11-14T23:00:56 warn task_recovered
+  2026-11-14T23:00:55 info report_generated
+  2026-11-14T23:00:55 info project_paused
+  2026-11-14T23:00:44 info report_generated
+  2026-11-14T22:59:04 info task_done
+## Capture attempt against the manual-only source
+ task 3 blocked | Source 'Lagos Life (operator: Vatar)' is awaiting human approval. Use manual evidence import for this page if it is needed.
+## Health
+  {'kind': 'sqlite', 'ok': True, 'projects': 1} worker_alive True [('http', True), ('chromium', False), ('firefox', False), ('webkit', False)] heuristic

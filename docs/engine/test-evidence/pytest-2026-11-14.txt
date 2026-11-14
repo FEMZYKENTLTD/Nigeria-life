@@ -1,0 +1,47 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.2, pytest-9.2.0, pluggy-1.7.0 -- /home/user/Nigeria-life/engine/backend/../.venv/bin/python
+rootdir: /home/user/Nigeria-life/engine/backend
+plugins: anyio-4.16.0
+collecting ... collected 34 items
+tests/test_adapters.py::test_registry_reports_every_engine_honestly PASSED
+tests/test_adapters.py::test_real_browser_engine[chromium] SKIPPED (...)
+tests/test_adapters.py::test_real_browser_engine[firefox] SKIPPED (f...)
+tests/test_adapters.py::test_real_browser_engine[webkit] SKIPPED (we...)
+tests/test_adapters.py::test_ai_works_without_a_provider PASSED
+tests/test_adapters.py::test_openai_compatible_provider_routes_models_and_calls_tools PASSED
+tests/test_api.py::test_bootstrap_imports_repo_research_and_keeps_source_manual PASSED
+tests/test_api.py::test_source_approval_flow_and_manual_evidence PASSED
+tests/test_api.py::test_validation PASSED
+tests/test_integration.py::test_agent_plans_captures_and_records_evidence PASSED
+tests/test_integration.py::test_robots_disallow_is_respected_and_explained PASSED
+tests/test_integration.py::test_unapproved_and_manual_only_sources_are_never_fetched PASSED
+tests/test_integration.py::test_no_duplicate_work_on_replan PASSED
+tests/test_integration.py::test_retry_then_success PASSED
+tests/test_integration.py::test_failure_is_recorded_not_lost PASSED
+tests/test_integration.py::test_recovery_after_interruption PASSED
+tests/test_integration.py::test_cancel_and_pause PASSED
+tests/test_integration.py::test_page_budget PASSED
+tests/test_integration.py::test_recapture_versions_changed_page PASSED
+tests/test_integration.py::test_import_of_real_repository_research PASSED
+tests/test_integration.py::test_analytics_values_match_their_inputs PASSED
+tests/test_integration.py::test_empty_project_has_no_made_up_numbers PASSED
+tests/test_integration.py::test_reports_in_every_format PASSED
+tests/test_integration.py::test_github_publish_needs_approval_and_leaves_working_tree_alone PASSED
+tests/test_integration.py::test_rejected_approval_does_nothing PASSED
+tests/test_integration.py::test_backup_is_a_readable_copy PASSED
+tests/test_integration.py::test_capture_throughput 
+PERF pipeline: 4 tasks in 0.11s (28 ms per task)
+PASSED
+tests/test_units.py::test_redaction_removes_secrets PASSED
+tests/test_units.py::test_page_understanding_structures_a_page PASSED
+tests/test_units.py::test_feature_categories_and_fields PASSED
+tests/test_units.py::test_findings_are_deduplicated PASSED
+tests/test_units.py::test_feature_update_keeps_history_and_protects_verified PASSED
+tests/test_units.py::test_search_ranks_by_shared_words PASSED
+tests/test_units.py::test_visual_comparison PASSED
+../.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_adapters.py:25: chromium binary not installed in this environment: Not installed. Run: playwright install chromium
+SKIPPED [1] tests/test_adapters.py:25: firefox binary not installed in this environment: Not installed. Run: playwright install firefox
+SKIPPED [1] tests/test_adapters.py:25: webkit binary not installed in this environment: Not installed. Run: playwright install webkit
+=================== 31 passed, 3 skipped, 1 warning in 4.68s ===================
