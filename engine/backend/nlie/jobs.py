@@ -220,11 +220,12 @@ def h_capture(s, t: Task):
                      http_status=cap.status, duration_ms=cap.duration_ms, console_errors=cap.console_errors))
 
     # Evidence: the captured HTML is archived to disk and hashed.
-    digest = hashlib.sha256(cap.html.encode("utf-8", "replace")).hexdigest()
+    raw = cap.html.encode("utf-8", "replace")
+    digest = hashlib.sha256(raw).hexdigest()
     ev_dir = st.data_dir / "evidence" / str(t.project_id)
     ev_dir.mkdir(parents=True, exist_ok=True)
     ev_path = ev_dir / f"{digest[:16]}.html"
-    ev_path.write_text(cap.html, encoding="utf-8", errors="replace")
+    ev_path.write_bytes(raw)  # bytes, not text: text mode rewrites line endings on Windows and the hash would no longer match
     ev = knowledge.add_evidence(s, t.project_id, kind="page_capture", source_url=cap.final_url, locator=f"{engine} {viewport[0]}x{viewport[1]}",
                                 summary=f"HTML captured by {engine} (JavaScript {'executed' if cap.rendered else 'not executed'}), HTTP {cap.status}.",
                                 classification="confirmed", file_path=str(ev_path), sha256=digest)
