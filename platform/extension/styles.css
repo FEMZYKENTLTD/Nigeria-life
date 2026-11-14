@@ -1,0 +1,87 @@
+:root {
+  --ink: #0a0a0c;
+  --panel: #17171e;
+  --line: #26262f;
+  --gold: #c9a227;
+  --gold-soft: #e6c96a;
+  --muted: #9a97a3;
+  --faint: #6b6875;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--ink);
+  color: #e8e6df;
+  padding: 14px;
+}
+header h1 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--gold-soft);
+}
+.sub { margin: 4px 0 12px; color: var(--faint); font-size: 11px; }
+section { margin-bottom: 12px; }
+label { display: block; color: var(--muted); font-size: 11px; margin: 8px 0 3px; }
+input, select, textarea {
+  width: 100%;
+  background: #131318;
+  border: 1px solid var(--line);
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: #8a6d1a; }
+.card-title {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.tab-preview {
+  background: #131318;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.chk { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+.chk input { width: auto; }
+button {
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 9px;
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: #1d1d26;
+  color: #fff;
+}
+button.primary { background: rgba(138, 109, 26, 0.25); border-color: #8a6d1a; color: var(--gold-soft); }
+button.primary:hover { background: rgba(138, 109, 26, 0.4); }
+button.secondary { background: transparent; color: var(--muted); }
+button.small { width: auto; margin-left: 6px; }
+.hidden { display: none; }
+.log {
+  margin: 14px 0 0;
+  min-height: 60px;
+  max-height: 160px;
+  overflow: auto;
+  background: #0d0d10;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+footer { margin-top: 12px; font-size: 10.5px; color: var(--faint); }
