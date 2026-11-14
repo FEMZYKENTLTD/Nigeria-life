@@ -1,35 +1,41 @@
 # 04 · Test evidence
 
-All results below are from 14 November 2026 on Linux, Python 3.11.2, Node 22.22.3, SQLite. Raw output:
+Two runs on 14 November 2026.
 
-- [`test-evidence/pytest-2026-11-14.txt`](test-evidence/pytest-2026-11-14.txt): **31 passed, 3 skipped** in 4.7 s
+**1. Continuous integration, three operating systems, real browsers.** GitHub Actions run `43652042188`: **34 passed, 0 failed, 0 skipped** on each of Ubuntu, Windows and macOS, with Chromium, Firefox and WebKit installed. The dashboard build job also passed. See it under the repository's Actions tab.
+
+**2. Build sandbox** (Linux, Python 3.11.2, Node 22.22.3, no browsers): 31 passed, 3 skipped. Raw output:
+
+- [`test-evidence/pytest-2026-11-14.txt`](test-evidence/pytest-2026-11-14.txt)
 - [`test-evidence/live-run-2026-11-14.txt`](test-evidence/live-run-2026-11-14.txt): the running engine on this repository's real data, including a kill and restart
 
-The 3 skipped tests are the real Chromium, Firefox and WebKit tests. They skipped because the browser binaries could not be downloaded in the build environment. They are not passes.
+The three tests skipped in the sandbox are the real-browser tests; they ran and passed in CI. Each opens a local HTML file, and checks that JavaScript ran, a console error was captured, a screenshot was saved and the profile folder was created.
 
-Captures in the tests go to a small fake website served in memory, so no real site was contacted. Nothing was fetched from lagoslife.app.
+CI found one real fault, now fixed: on Windows the archived HTML was written in text mode, which changed line endings, so the stored hash did not match the file.
+
+Pipeline tests capture from a small fake website served in memory, so no real site was contacted. Nothing was fetched from lagoslife.app.
 
 ## Acceptance criteria
 
 | # | Criterion | Result | Evidence |
 | --- | --- | --- | --- |
-| 1 | Installation | **Met on Linux** | Steps in `README.md` were the ones used. Windows and macOS not run |
+| 1 | Installation | **Met** | Dependencies install and tests run on Linux, Windows and macOS in CI |
 | 2 | Working dashboard | **Partly met** | `npm run build` passes TypeScript checking and builds; the engine serves it (HTTP 200); every API route it calls is tested. Not looked at in a browser by the author |
-| 3 | Working database | **Met (SQLite)** | All tests use a real SQLite file. `test_backup_is_a_readable_copy`. PostgreSQL not run |
-| 4 | Multiple browser engines | **Not met** | Four adapters registered; only `http` executed. `test_real_browser_engine[chromium|firefox|webkit]` skipped |
-| 5 | Persistent sessions | **Not met** | Profile folders are wired to Playwright's persistent context; never executed |
+| 3 | Working database | **Met (SQLite)** | All tests use a real SQLite file. `test_backup_is_a_readable_copy`. on three operating systems. PostgreSQL not run |
+| 4 | Multiple browser engines | **Met, with a limit** | `test_real_browser_engine` passes for chromium, firefox and webkit on three operating systems. Limit: against a local page, not through the full pipeline on a live site |
+| 5 | Persistent sessions | **Partly met** | Each engine launches with a persistent profile folder and the folder is created. That a login survives a restart was not tested |
 | 6 | Task planning | **Met, rule-based** | `test_agent_plans_captures_and_records_evidence`, `test_no_duplicate_work_on_replan`. No language model is involved |
 | 7 | Structured observations | **Met** | `test_page_understanding_structures_a_page`; findings checked for ID, page, observation, evidence, time, confidence, status |
 | 8 | Evidence management | **Met** | Archived HTML re-hashed and compared to the stored SHA-256; manual upload via API in `test_source_approval_flow_and_manual_evidence` |
-| 9 | Screenshot organisation | **Partly met** | Upload, listing, annotation and pixel comparison tested (`test_visual_comparison`). Automatic screenshots need a browser engine: not run |
+| 9 | Screenshot organisation | **Partly met** | Upload, listing, annotation and pixel comparison tested (`test_visual_comparison`). Browsers save screenshots in CI; filing them through the pipeline is not run with a real browser |
 | 10 | Analytics | **Met** | `test_analytics_values_match_their_inputs`, `test_empty_project_has_no_made_up_numbers` |
 | 11 | Report generation | **Met** | `test_reports_in_every_format`: six formats, PDF header and size checked; live run produced five files |
 | 12 | GitHub integration | **Partly met** | Branch, commit and push verified against a local bare remote, with the working tree untouched and an existing branch refused. Pull-request creation not run |
 | 13 | Recovery after interruption | **Met** | `test_recovery_after_interruption`; live run: server killed with SIGKILL, task recovered and finished after restart |
-| 14 | Cross-platform build | **Not met** | Python and web code have nothing platform-specific, but only Linux was run. Tauri never compiled. A CI workflow for Linux, Windows and macOS is in `.github/workflows/engine.yml` |
+| 14 | Cross-platform build | **Partly met** | Engine and dashboard build and pass on Linux, Windows and macOS. The Tauri desktop app was never compiled, so there is no installer |
 | 15 | Complete documentation | **Met for what exists** | This folder |
 
-Seven met, three partly met, three not met, two met with a stated limit (1 and 3).
+Eight met, two met with a stated limit (3 and 4), five partly met (2, 5, 9, 12, 14). None fully unmet; the largest remaining gaps are the unviewed dashboard and the uncompiled desktop app.
 
 ## Safety rules that have tests
 

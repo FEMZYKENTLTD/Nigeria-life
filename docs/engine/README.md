@@ -39,7 +39,7 @@ Secrets are read from the environment only. They are never written to the databa
 
 | Area | State | Evidence |
 | --- | --- | --- |
-| Database (SQLite), 17 tables, version history, backup | Working, tested | `04-test-evidence.md` |
+| Database (SQLite), 17 tables, version history, backup | Working, tested on Linux, Windows, macOS | `04-test-evidence.md` |
 | Import of existing `docs/research/` | Working, tested against the real files | 29 evidence items, 98 features, 35 pages, 22 questions |
 | Task queue: retry, cancel, pause, recovery after a crash, no duplicate work | Working, tested | |
 | Permission gate: approval, manual-only, scope, page limit, robots.txt | Working, tested | |
@@ -50,7 +50,7 @@ Secrets are read from the environment only. They are never written to the databa
 | Git: read repository, find doc gaps, branch + commit + push after approval | Working, tested against a local throwaway remote | |
 | Opening a pull request | Written, **not tested** (would have created a stray branch on GitHub) | |
 | Dashboard, eight sections | Builds and type-checks; served by the engine. **Not viewed in a browser by the author** (none available) | |
-| Chromium, Firefox, WebKit capture, screenshots, login profiles | Written, **never run**: browser binaries could not be downloaded here. Tests skip and say so | |
+| Chromium, Firefox, WebKit: rendering, console errors, screenshots, profile folder | Working in CI on Linux, Windows and macOS against a local test page. **Not yet run through the full capture pipeline against a live site**, and a saved login surviving a restart is unverified | CI run 43652042188 |
 | PostgreSQL | Same models; **never run** against PostgreSQL | |
 | Language-model adapter | Tested against a mock server only. **No part of the pipeline calls a model yet**; planning and analysis are rule-based | |
 | Vision analysis of screenshots | **Not implemented.** Pixel comparison only | |

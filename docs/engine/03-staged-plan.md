@@ -9,7 +9,8 @@ Status as of 14 November 2026. "Done" means it runs and has a passing test. "Wri
 | 1 | Git integration (read, gaps, branch, commit, push) | Done against a local remote |
 | 1 | Pull-request creation | Written |
 | 2 | HTTP capture, retries, time-outs, run log | Done |
-| 2 | Chromium, Firefox, WebKit capture, screenshots, console errors, mobile emulation, login profiles | Written |
+| 2 | Chromium, Firefox, WebKit capture, screenshots, console errors, profile folder | Done in CI on three operating systems (local test page) |
+| 2 | Mobile emulation, visible mode, a login session reused after restart | Written |
 | 3 | Planner, continuity, completeness criteria | Done (rule-based) |
 | 3 | Page understanding, findings, features, knowledge base, search, versions | Done |
 | 3 | Import of existing research | Done |
@@ -18,7 +19,7 @@ Status as of 14 November 2026. "Done" means it runs and has a passing test. "Wri
 | 4 | Reports in six formats | Done |
 | 4 | Screenshot comparison (pixels) and annotations | Done |
 | 4 | Vision-model analysis of screenshots | Not started |
-| 5 | Cross-browser verification | Not done: needs a machine with browsers. CI workflow added to run it |
+| 5 | Cross-browser and cross-platform verification | Done in CI: 34 tests pass on Linux, Windows and macOS with all three browsers |
 | 5 | Desktop packaging | Written, never compiled |
 | 5 | Reliability: logging, retry, checkpoint, backup, validation, dedupe, cancel | Done |
 | 5 | Performance test | One pipeline timing test. No load test |
@@ -32,7 +33,7 @@ Status as of 14 November 2026. "Done" means it runs and has a passing test. "Wri
 
 ## Next steps, in order
 
-1. On a machine with internet: `playwright install`, run the three skipped browser tests, fix what fails.
+1. Run a real-browser capture through the whole pipeline against a site you own or are permitted to automate; check screenshots, mobile emulation and a saved login.
 2. Open the dashboard and go through each section; fix layout and interaction faults.
 3. Build the Tauri shell; bundle Python as a sidecar.
 4. Run the test suite against PostgreSQL.

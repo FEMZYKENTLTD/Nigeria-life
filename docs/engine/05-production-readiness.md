@@ -15,7 +15,7 @@
 
 | # | Issue | Why it matters | What to do |
 | --- | --- | --- | --- |
-| 1 | Real browser engines never executed | The Playwright adapter is about 100 untested lines. Rendering, screenshots, console capture, mobile emulation and saved login sessions are all unproven | Install browsers, run the three skipped tests, fix |
+| 1 | Real browsers tested only on a local page | Rendering, console capture and screenshots pass in CI on three systems. The full pipeline with a real browser on a live site, mobile emulation, visible mode and saved logins are unproven | Run it against a site you may automate |
 | 2 | Dashboard never viewed | Layout, charts and forms may have visible faults that type-checking cannot find | Walk through all eight sections |
 | 3 | No sign-in on the dashboard or API | Anyone who can reach the port can approve actions and trigger commits | Keep it bound to 127.0.0.1 (the default). Add authentication before exposing it |
 | 4 | Desktop app never compiled; Python not bundled | No installer exists | Build on each OS; add a PyInstaller sidecar; add icons |
@@ -37,7 +37,6 @@
 - **Report PDFs replace characters outside Latin-1 with "?"** (the ₦ sign, for example) because built-in PDF fonts are used.
 - **Uploads go through JSON as base64**, capped at 15 MB.
 - **No scheduled runs.** A person presses "Plan next steps".
-- **The CI workflow has not been observed running.**
 
 ## What the engine will not do, by design
 
