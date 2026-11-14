@@ -17,8 +17,22 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r engine/backend/requirements.txt pytest
       - run: python -m playwright install --with-deps chromium firefox webkit
-      - run: python -m pytest -v -rs
+      - run: python -m pytest -v -rs --junitxml=junit.xml
         working-directory: engine/backend
+      - name: Report results as annotations
+        if: always()
+        shell: python
+        run: |
+          import xml.etree.ElementTree as ET
+          s = ET.parse("engine/backend/junit.xml").getroot()
+          s = s if s.tag == "testsuite" else s[0]
+          print(f"::notice title=pytest::tests={s.get('tests')} failures={s.get('failures')} errors={s.get('errors')} skipped={s.get('skipped')}")
+          for c in s.iter("testcase"):
+              for kind in ("failure", "error", "skipped"):
+                  e = c.find(kind)
+                  if e is not None:
+                      msg = ((e.get("message") or "") + " | " + (e.text or "")[-700:]).replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+                      print(f"::{'warning' if kind == 'skipped' else 'error'} title={kind} {c.get('name')}::{msg}")
   dashboard:
     runs-on: ubuntu-latest
     steps:

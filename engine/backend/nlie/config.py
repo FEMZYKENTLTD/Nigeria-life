@@ -16,6 +16,7 @@ class Settings:
     ai_model_complex: str = field(default_factory=lambda: os.environ.get("NLIE_AI_MODEL_COMPLEX", ""))
     ai_model_vision: str = field(default_factory=lambda: os.environ.get("NLIE_AI_MODEL_VISION", ""))
     github_token: str = field(default_factory=lambda: os.environ.get("GITHUB_TOKEN", ""))
+    default_engine: str = field(default_factory=lambda: os.environ.get("NLIE_DEFAULT_ENGINE", ""))  # empty = best installed
     worker_poll_seconds: float = 0.5
 
     def __post_init__(self):

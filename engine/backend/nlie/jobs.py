@@ -196,7 +196,7 @@ def h_capture(s, t: Task):
         raise Blocked(verdict.reason + " Use manual evidence import for this page if it is needed.")
 
     profile = s.query(BrowserProfile).filter_by(name=p.get("profile", "")).first()
-    engine = best_engine(p.get("engine") or (profile.engine if profile else ""))
+    engine = best_engine(p.get("engine") or (profile.engine if profile else "") or st.default_engine)
     adapter = get_adapter(engine)
     viewport = tuple(p.get("viewport") or ((profile.viewport_width, profile.viewport_height) if profile else (1440, 900)))
     host = urlparse(url).netloc

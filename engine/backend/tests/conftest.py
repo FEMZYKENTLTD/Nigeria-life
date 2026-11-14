@@ -50,6 +50,7 @@ class FakeSite(httpx.BaseTransport):
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("NLIE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("NLIE_WORKER", "0")
+    monkeypatch.setenv("NLIE_DEFAULT_ENGINE", "http")  # pipeline tests use the in-memory site even where real browsers are installed
     for k in ("NLIE_DATABASE_URL", "NLIE_AI_BASE_URL", "NLIE_AI_MODEL_SIMPLE"):
         monkeypatch.delenv(k, raising=False)
     from nlie import config, db, jobs, permissions
