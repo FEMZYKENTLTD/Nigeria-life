@@ -44,6 +44,29 @@ async def init_db() -> None:
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # idempotent column patches for pre-existing databases (create_all does
+    # not ALTER existing tables): documented, honest schema evolution
+    await _ensure_schema()
+
+
+async def _ensure_schema() -> None:
+    assert _engine is not None
+    from sqlalchemy import text
+
+    if _engine.dialect.name == "sqlite":
+        async with _engine.begin() as conn:
+            cols = (await conn.execute(text("PRAGMA table_info(projects)"))).fetchall()
+            if cols and not any(c[1] == "owner_id" for c in cols):
+                await conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR(36)"))
+    elif _engine.dialect.name == "postgresql":
+        async with _engine.begin() as conn:
+            exists = (await conn.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'projects' AND column_name = 'owner_id'"))).first()
+            if not exists:
+                await conn.execute(text(
+                    "ALTER TABLE projects ADD COLUMN owner_id VARCHAR(36)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_id ON projects (owner_id)"))
 
 
 async def close_db() -> None:

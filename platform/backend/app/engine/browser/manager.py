@@ -397,11 +397,14 @@ async def run_capture(project_id: str, source_url: str, engine: str = "chromium"
     }
 
 
-async def list_sessions(project_id: str | None = None, limit: int = 50) -> list[dict]:
+async def list_sessions(project_id: str | None = None, limit: int = 50,
+                        project_ids: list[str] | None = None) -> list[dict]:
     async with session_scope() as s:
         q = select(ResearchSession)
         if project_id:
             q = q.where(ResearchSession.project_id == project_id)
+        elif project_ids is not None:
+            q = q.where(ResearchSession.project_id.in_(project_ids))
         rows = (await s.execute(q.order_by(ResearchSession.started_at.desc()).limit(limit))).scalars().all()
     return [{"id": r.id, "project_id": r.project_id, "engine": r.engine, "mode": r.mode,
              "status": r.status, "summary": r.summary or {}, "error": r.error,

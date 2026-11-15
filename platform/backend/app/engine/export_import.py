@@ -170,7 +170,7 @@ def _validate_bundle(bundle: dict) -> str | None:
     return None
 
 
-async def import_project(bundle: dict, name_override: str = "") -> dict:
+async def import_project(bundle: dict, name_override: str = "", owner_id: str | None = None) -> dict:
     """Create a new project from an exported bundle with fresh ids and
     remapped cross-references. Returns the new project id + counts."""
     err = _validate_bundle(bundle)
@@ -183,7 +183,8 @@ async def import_project(bundle: dict, name_override: str = "") -> dict:
 
     slug = slugify_safe(name) + "-" + hashlib.sha1(f"{pid}{time.time()}".encode()).hexdigest()[:6]
     async with session_scope() as s:
-        p = Project(id=pid, name=name, slug=slug, description=src.get("description", ""),
+        p = Project(id=pid, owner_id=owner_id, name=name, slug=slug,
+                    description=src.get("description", ""),
                     industry=src.get("industry", ""),
                     target_base_url=src.get("target_base_url", ""),
                     permissions=src.get("permissions") or {})

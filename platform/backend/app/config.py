@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # --- github ---
     github_repo: str = "FEMZYKENTLTD/Nigeria-life"  # central project repo (display + remote ops)
     local_repo_path: str = ""                        # if set, operate on the local checkout via git
+    # --- multi-user / Supabase (optional; local-first default is single-user) ---
+    supabase_url: str = ""        # e.g. https://xyz.supabase.co — enables JWT auth when set with the secret
+    supabase_jwt_secret: str = ""  # project JWT secret (HS256 verification; never logged)
+    admin_emails: str = ""        # comma-separated emails auto-granted the admin role
+    # --- declared browser identity (configurable so re-branded deployments
+    #     can change it; always a declared, identifiable user agent) ---
+    browser_ua: str = "NigeriaLifeResearchBot/1.0 (+research-platform; authorised-research-only)"
 
     @property
     def cors_origin_list(self) -> list[str]:

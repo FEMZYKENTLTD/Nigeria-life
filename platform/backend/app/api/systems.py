@@ -23,6 +23,8 @@ from ..models import (ActivityLog, Evidence, Feature, GitHubState, Observation,
                       Source, UnresolvedQuestion)
 from ..db import session_scope
 from ..schemas import CaptureIn, GitHubWriteIn, ProfileIn, ReportGenIn, SearchIn
+from ..security.auth import (auth_enabled, check_project_access, get_current_user,
+                             is_admin, require_admin, require_project_access)
 
 router = APIRouter(tags=["systems"])
 
@@ -74,7 +76,8 @@ async def _ctx(project_id: str, db) -> dict:
 # ---------------------------------------------------------------- analytics
 
 @router.get("/projects/{project_id}/analytics")
-async def project_analytics(project_id: str, db=Depends(get_session)):
+async def project_analytics(project_id: str, db=Depends(get_session),
+                            _p=Depends(require_project_access)):
     ctx = await _ctx(project_id, db)
     return analytics.full_project_analytics(
         ctx["project"], ctx["pages"], ctx["features"],
@@ -90,7 +93,8 @@ async def report_types():
 
 
 @router.get("/projects/{project_id}/reports")
-async def list_reports(project_id: str, db=Depends(get_session)):
+async def list_reports(project_id: str, db=Depends(get_session),
+                       _p=Depends(require_project_access)):
     rows = (await db.execute(
         select(Report).where(Report.project_id == project_id)
         .order_by(Report.generated_at.desc())
@@ -101,7 +105,8 @@ async def list_reports(project_id: str, db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/reports/generate")
-async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_session)):
+async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_session),
+                          _p=Depends(require_project_access)):
     if body.type not in REPORT_TYPES:
         raise HTTPException(400, f"unknown report type; options: {', '.join(REPORT_TYPES)}")
     if body.format not in ("md", "json", "csv", "html", "pdf"):
@@ -146,22 +151,25 @@ async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_ses
 
 
 @router.get("/reports/{report_id}")
-async def get_report(report_id: str, db=Depends(get_session)):
+async def get_report(report_id: str, db=Depends(get_session), user=Depends(get_current_user)):
     r = (await db.execute(select(Report).where(Report.id == report_id))).scalars().first()
     if not r:
         raise HTTPException(404, "report not found")
+    await check_project_access(db, user, r.project_id)
     return {c.name: getattr(r, c.name) for c in r.__table__.columns}
 
 
 # ---------------------------------------------------------------- knowledge base
 
 @router.post("/projects/{project_id}/knowledge/search")
-async def knowledge_search(project_id: str, body: SearchIn, db=Depends(get_session)):
+async def knowledge_search(project_id: str, body: SearchIn, db=Depends(get_session),
+                           _p=Depends(require_project_access)):
     return await kb_search(project_id, body.query, body.kinds, body.limit)
 
 
 @router.get("/knowledge/related")
-async def knowledge_related(kind: str, ref_id: str, project_id: str = "", db=Depends(get_session)):
+async def knowledge_related(kind: str, ref_id: str, project_id: str = "",
+                            db=Depends(get_session), user=Depends(get_current_user)):
     if not project_id:
         # resolve project from ref id kind
         if kind == "feature":
@@ -172,6 +180,7 @@ async def knowledge_related(kind: str, ref_id: str, project_id: str = "", db=Dep
             project_id = p.project_id if p else ""
     if not project_id:
         raise HTTPException(400, "project_id required")
+    await check_project_access(db, user, project_id)
     return await kb_related(project_id, kind, ref_id)
 
 
@@ -185,7 +194,9 @@ async def browsers_health(refresh: bool = False, db=Depends(get_session)):
 
 
 @router.post("/browsers/profiles", status_code=201)
-async def create_browser_profile(body: ProfileIn, db=Depends(get_session)):
+async def create_browser_profile(body: ProfileIn, db=Depends(get_session),
+                                 user=Depends(get_current_user)):
+    await check_project_access(db, user, body.project_id)
     return await browser_manager.create_profile(body.project_id, body.name, body.engine,
                                                 body.viewports, body.shared)
 
@@ -196,10 +207,9 @@ async def browser_profiles():
 
 
 @router.post("/projects/{project_id}/captures")
-async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session)):
-    p = (await db.execute(select(Project).where(Project.id == project_id))).scalars().first()
-    if p is None:
-        raise HTTPException(404, "project not found")
+async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session),
+                      user=Depends(get_current_user)):
+    await check_project_access(db, user, project_id)
     result = await browser_manager.run_capture(
         project_id=project_id, source_url=body.url, engine=body.engine,
         headless=body.headless, viewport=body.viewport,
@@ -214,12 +224,26 @@ async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session))
 
 
 @router.get("/sessions")
-async def sessions(project_id: str = "", limit: int = 50, db=Depends(get_session)):
-    return await browser_manager.list_sessions(project_id or None, limit)
+async def sessions(project_id: str = "", limit: int = 50, db=Depends(get_session),
+                   user=Depends(get_current_user)):
+    if project_id:
+        await check_project_access(db, user, project_id)
+        return await browser_manager.list_sessions(project_id, limit)
+    pids = None
+    if auth_enabled() and not is_admin(user):
+        pids = list((await db.execute(
+            select(Project.id).where(Project.owner_id == user["id"]))).scalars().all()) or [""]
+    return await browser_manager.list_sessions(None, limit, project_ids=pids)
 
 
 @router.get("/sessions/{session_id}/log")
-async def session_log(session_id: str):
+async def session_log(session_id: str, db=Depends(get_session),
+                      user=Depends(get_current_user)):
+    sess = (await db.execute(
+        select(ResearchSession).where(ResearchSession.id == session_id))).scalars().first()
+    if sess is None:
+        raise HTTPException(404, "session not found")
+    await check_project_access(db, user, sess.project_id)
     return await browser_manager.session_log(session_id)
 
 
@@ -251,7 +275,9 @@ async def github_status(project_id: str = "", db=Depends(get_session)):
 
 
 @router.post("/github/sync")
-async def github_sync(project_id: str = "", db=Depends(get_session)):
+async def github_sync(project_id: str = "", db=Depends(get_session),
+                      user=Depends(get_current_user)):
+    require_admin(user)
     s = get_settings()
     adapter = get_adapter(local_path=s.local_repo_path or None, remote=s.github_repo or None)
     if adapter is None:
@@ -291,9 +317,12 @@ async def github_sync(project_id: str = "", db=Depends(get_session)):
 
 
 @router.post("/github/write-back")
-async def github_write(body: GitHubWriteIn, decision_id: str = "", db=Depends(get_session)):
+async def github_write(body: GitHubWriteIn, decision_id: str = "", db=Depends(get_session),
+                       user=Depends(get_current_user)):
     """Consequential repo change: allowed only after an approved Decision of
-    kind repo_change. Pass ?decision_id=<approved decision>."""
+    kind repo_change. Pass ?decision_id=<approved decision>. Admin-only in
+    multi-user mode (the central repo is shared)."""
+    require_admin(user)
     from ..models import Decision
     if not decision_id:
         raise HTTPException(400, "consequential repo change requires an approved decision: pass ?decision_id=<id>")
@@ -325,7 +354,8 @@ async def github_write(body: GitHubWriteIn, decision_id: str = "", db=Depends(ge
 # ---------------------------------------------------------------- import pipeline
 
 @router.post("/projects/{project_id}/import/research-package")
-async def import_package(project_id: str, docs_dir: str = "docs/research", db=Depends(get_session)):
+async def import_package(project_id: str, docs_dir: str = "docs/research",
+                         db=Depends(get_session), _p=Depends(require_project_access)):
     """Ingest a markdown research package directory into the project."""
     from ..engine.evidence_import import import_research_package
     s = get_settings()
@@ -342,7 +372,8 @@ async def import_package(project_id: str, docs_dir: str = "docs/research", db=De
 # ---------------------------------------------------------------- system: backup / plugins
 
 @router.post("/systems/backup")
-async def systems_backup():
+async def systems_backup(user=Depends(get_current_user)):
+    require_admin(user)
     from ..engine.export_import import create_backup
     r = await create_backup()
     if not r.get("ok"):
@@ -351,7 +382,8 @@ async def systems_backup():
 
 
 @router.get("/systems/backups")
-async def systems_backups():
+async def systems_backups(user=Depends(get_current_user)):
+    require_admin(user)
     from ..engine.export_import import list_backups
     return list_backups()
 

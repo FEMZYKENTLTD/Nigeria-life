@@ -19,6 +19,8 @@ from ..engine.page_understanding import analyze_html
 from ..models import (ActivityLog, Evidence, Feature, Observation, PageRecord,
                       Project, Source, UnresolvedQuestion)
 from ..schemas import FeatureIn, ObservationIn, PageImportIn, QuestionIn, SourceIn
+from ..security.auth import (check_project_access, get_current_user,
+                             require_project_access)
 
 router = APIRouter(tags=["research"])
 
@@ -26,7 +28,7 @@ router = APIRouter(tags=["research"])
 # ---------------------------------------------------------------- sources
 
 @router.get("/projects/{project_id}/sources")
-async def list_sources(project_id: str, db=Depends(get_session)):
+async def list_sources(project_id: str, db=Depends(get_session), _p=Depends(require_project_access)):
     rows = (await db.execute(
         select(Source).where(Source.project_id == project_id).order_by(Source.created_at.desc())
     )).scalars().all()
@@ -35,7 +37,7 @@ async def list_sources(project_id: str, db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/sources", status_code=201)
-async def add_source(project_id: str, body: SourceIn, db=Depends(get_session)):
+async def add_source(project_id: str, body: SourceIn, db=Depends(get_session), _p=Depends(require_project_access)):
     from urllib.parse import urlparse
     domain = urlparse(body.url).netloc or body.url
     status = "authorised" if (body.status == "authorised" and body.auto_authorise) else body.status
@@ -53,7 +55,7 @@ async def add_source(project_id: str, body: SourceIn, db=Depends(get_session)):
 # ---------------------------------------------------------------- pages
 
 @router.get("/projects/{project_id}/pages")
-async def list_pages(project_id: str, q: str = "", db=Depends(get_session)):
+async def list_pages(project_id: str, q: str = "", db=Depends(get_session), _p=Depends(require_project_access)):
     query = select(PageRecord).where(PageRecord.project_id == project_id)
     rows = (await db.execute(query.order_by(PageRecord.updated_at.desc()))).scalars().all()
     out = [{c.name: getattr(r, c.name) for c in r.__table__.columns} | {
@@ -68,7 +70,7 @@ async def list_pages(project_id: str, q: str = "", db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/pages/import", status_code=201)
-async def import_page(project_id: str, body: PageImportIn, db=Depends(get_session)):
+async def import_page(project_id: str, body: PageImportIn, db=Depends(get_session), _p=Depends(require_project_access)):
     """Manual evidence import (the sanctioned path for restricted sources)."""
     analysis = None
     if body.html:
@@ -132,7 +134,7 @@ async def import_page(project_id: str, body: PageImportIn, db=Depends(get_sessio
 # ---------------------------------------------------------------- features
 
 @router.get("/projects/{project_id}/features")
-async def list_features(project_id: str, category: str = "", db=Depends(get_session)):
+async def list_features(project_id: str, category: str = "", db=Depends(get_session), _p=Depends(require_project_access)):
     q = select(Feature).where(Feature.project_id == project_id)
     if category:
         q = q.where(Feature.category == category)
@@ -142,7 +144,7 @@ async def list_features(project_id: str, category: str = "", db=Depends(get_sess
 
 
 @router.post("/projects/{project_id}/features", status_code=201)
-async def create_feature(project_id: str, body: FeatureIn, db=Depends(get_session)):
+async def create_feature(project_id: str, body: FeatureIn, db=Depends(get_session), _p=Depends(require_project_access)):
     existing = (await db.execute(
         select(Feature).where(Feature.project_id == project_id, Feature.slug == slugify(body.name))
     )).scalars().first()
@@ -181,10 +183,12 @@ class FeaturePatch(FeatureIn):
 
 
 @router.patch("/features/{feature_id}")
-async def update_feature(feature_id: str, body: FeaturePatch, db=Depends(get_session)):
+async def update_feature(feature_id: str, body: FeaturePatch, db=Depends(get_session),
+                         user=Depends(get_current_user)):
     f = (await db.execute(select(Feature).where(Feature.id == feature_id))).scalars().first()
     if not f:
         raise HTTPException(404, "feature not found")
+    await check_project_access(db, user, f.project_id)
     for k, v in body.model_dump(exclude_none=True).items():
         if k == "name" and v:
             f.name = v
@@ -199,10 +203,12 @@ async def update_feature(feature_id: str, body: FeaturePatch, db=Depends(get_ses
 
 
 @router.get("/features/{feature_id}/related")
-async def feature_related(feature_id: str, db=Depends(get_session)):
+async def feature_related(feature_id: str, db=Depends(get_session),
+                          user=Depends(get_current_user)):
     f = (await db.execute(select(Feature).where(Feature.id == feature_id))).scalars().first()
     if not f:
         raise HTTPException(404, "feature not found")
+    await check_project_access(db, user, f.project_id)
     return {"dependencies": f.dependencies or [], "related": f.related_features or [],
             "knowledge": await kb_related(f.project_id, "feature", f.id)}
 
@@ -210,7 +216,7 @@ async def feature_related(feature_id: str, db=Depends(get_session)):
 # ---------------------------------------------------------------- observations
 
 @router.get("/projects/{project_id}/observations")
-async def list_observations(project_id: str, kind: str = "", status: str = "", db=Depends(get_session)):
+async def list_observations(project_id: str, kind: str = "", status: str = "", db=Depends(get_session), _p=Depends(require_project_access)):
     q = select(Observation).where(Observation.project_id == project_id)
     if kind:
         q = q.where(Observation.kind == kind)
@@ -222,7 +228,7 @@ async def list_observations(project_id: str, kind: str = "", status: str = "", d
 
 
 @router.post("/projects/{project_id}/observations", status_code=201)
-async def add_observation(project_id: str, body: ObservationIn, db=Depends(get_session)):
+async def add_observation(project_id: str, body: ObservationIn, db=Depends(get_session), _p=Depends(require_project_access)):
     o = Observation(id=new_id(), project_id=project_id, **body.model_dump())
     db.add(o)
     db.add(ActivityLog(project_id=project_id, actor="user", action="observation.added",
@@ -238,7 +244,7 @@ async def add_observation(project_id: str, body: ObservationIn, db=Depends(get_s
 # ---------------------------------------------------------------- evidence
 
 @router.get("/projects/{project_id}/evidence")
-async def list_evidence(project_id: str, cls: str = "", db=Depends(get_session)):
+async def list_evidence(project_id: str, cls: str = "", db=Depends(get_session), _p=Depends(require_project_access)):
     q = select(Evidence).where(Evidence.project_id == project_id)
     if cls:
         q = q.where(Evidence.evidence_class == cls)
@@ -289,7 +295,7 @@ async def import_evidence_file(project_id: str, cls: str = "I", method: str = "i
 # ---------------------------------------------------------------- questions
 
 @router.get("/projects/{project_id}/questions")
-async def list_questions(project_id: str, db=Depends(get_session)):
+async def list_questions(project_id: str, db=Depends(get_session), _p=Depends(require_project_access)):
     rows = (await db.execute(
         select(UnresolvedQuestion).where(UnresolvedQuestion.project_id == project_id)
         .order_by(UnresolvedQuestion.created_at.desc())
@@ -299,7 +305,7 @@ async def list_questions(project_id: str, db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/questions", status_code=201)
-async def add_question(project_id: str, body: QuestionIn, db=Depends(get_session)):
+async def add_question(project_id: str, body: QuestionIn, db=Depends(get_session), _p=Depends(require_project_access)):
     q = UnresolvedQuestion(id=new_id(), project_id=project_id, question=body.question,
                            context=body.context)
     db.add(q)
@@ -308,12 +314,14 @@ async def add_question(project_id: str, body: QuestionIn, db=Depends(get_session
 
 
 @router.post("/questions/{question_id}/resolve")
-async def resolve_question(question_id: str, resolution: str = "", db=Depends(get_session)):
+async def resolve_question(question_id: str, resolution: str = "",
+                           db=Depends(get_session), user=Depends(get_current_user)):
     q = (await db.execute(
         select(UnresolvedQuestion).where(UnresolvedQuestion.id == question_id)
     )).scalars().first()
     if not q:
         raise HTTPException(404, "question not found")
+    await check_project_access(db, user, q.project_id)
     q.status = "resolved"
     q.resolution = resolution
     q.updated_at = datetime.now(timezone.utc)

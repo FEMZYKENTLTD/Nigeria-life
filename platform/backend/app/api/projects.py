@@ -13,6 +13,8 @@ from ..engine.knowledge import upsert_knowledge
 from ..models import (ActivityLog, Evidence, Feature, Observation, PageRecord,
                       Project, ResearchSession, ResearchTask)
 from ..schemas import ProjectIn, ProjectPatch
+from ..security.auth import (auth_enabled, check_project_access, get_current_user,
+                             is_admin)
 
 router = APIRouter(tags=["projects"])
 
@@ -25,19 +27,37 @@ def _p(m: Project) -> dict:
 
 
 @router.get("/overview")
-async def overview(db=Depends(get_session)):
-    projects = (await db.execute(select(Project).order_by(Project.created_at.desc()))).scalars().all()
-    tasks = (await db.execute(select(ResearchTask))).scalars().all()
-    pages = (await db.execute(select(PageRecord))).scalars().all()
-    features = (await db.execute(select(Feature))).scalars().all()
-    evidence = (await db.execute(select(Evidence))).scalars().all()
-    observations = (await db.execute(select(Observation))).scalars().all()
-    activity = (await db.execute(
-        select(ActivityLog).order_by(ActivityLog.ts.desc()).limit(30)
-    )).scalars().all()
-    sessions = (await db.execute(
-        select(func.count()).select_from(ResearchSession)
-    )).scalar() or 0
+async def overview(db=Depends(get_session), user=Depends(get_current_user)):
+    # members only ever see their own projects; admins (and local mode) see all
+    if auth_enabled() and not is_admin(user):
+        projects = (await db.execute(
+            select(Project).where(Project.owner_id == user["id"])
+            .order_by(Project.created_at.desc()))).scalars().all()
+        pids = [p.id for p in projects] or [""]
+        tasks = (await db.execute(select(ResearchTask).where(ResearchTask.project_id.in_(pids)))).scalars().all()
+        pages = (await db.execute(select(PageRecord).where(PageRecord.project_id.in_(pids)))).scalars().all()
+        features = (await db.execute(select(Feature).where(Feature.project_id.in_(pids)))).scalars().all()
+        evidence = (await db.execute(select(Evidence).where(Evidence.project_id.in_(pids)))).scalars().all()
+        observations = (await db.execute(select(Observation).where(Observation.project_id.in_(pids)))).scalars().all()
+        activity = (await db.execute(
+            select(ActivityLog).where(ActivityLog.project_id.in_(pids))
+            .order_by(ActivityLog.ts.desc()).limit(30))).scalars().all()
+        sessions = (await db.execute(
+            select(func.count()).select_from(ResearchSession).where(ResearchSession.project_id.in_(pids))
+        )).scalar() or 0
+    else:
+        projects = (await db.execute(select(Project).order_by(Project.created_at.desc()))).scalars().all()
+        tasks = (await db.execute(select(ResearchTask))).scalars().all()
+        pages = (await db.execute(select(PageRecord))).scalars().all()
+        features = (await db.execute(select(Feature))).scalars().all()
+        evidence = (await db.execute(select(Evidence))).scalars().all()
+        observations = (await db.execute(select(Observation))).scalars().all()
+        activity = (await db.execute(
+            select(ActivityLog).order_by(ActivityLog.ts.desc()).limit(30)
+        )).scalars().all()
+        sessions = (await db.execute(
+            select(func.count()).select_from(ResearchSession)
+        )).scalar() or 0
 
     def by_project(rows, field="project_id"):
         out: dict[str, list] = {}
@@ -87,18 +107,23 @@ async def overview(db=Depends(get_session)):
 
 
 @router.get("/projects")
-async def list_projects(db=Depends(get_session)):
-    rows = (await db.execute(select(Project).order_by(Project.created_at.desc()))).scalars().all()
+async def list_projects(db=Depends(get_session), user=Depends(get_current_user)):
+    q = select(Project).order_by(Project.created_at.desc())
+    if auth_enabled() and not is_admin(user):
+        q = q.where(Project.owner_id == user["id"])
+    rows = (await db.execute(q)).scalars().all()
     return [_p(p) for p in rows]
 
 
 @router.post("/projects", status_code=201)
-async def create_project(body: ProjectIn, db=Depends(get_session)):
+async def create_project(body: ProjectIn, db=Depends(get_session), user=Depends(get_current_user)):
     slug = slugify(body.name)
     existing = (await db.execute(select(Project).where(Project.slug == slug))).scalars().first()
     if existing:
         raise HTTPException(409, f"project with name '{body.name}' already exists")
-    p = Project(id=new_id(), name=body.name, slug=slug, description=body.description,
+    p = Project(id=new_id(),
+                owner_id=user["id"] if auth_enabled() else None,
+                name=body.name, slug=slug, description=body.description,
                 industry=body.industry, target_base_url=body.target_base_url,
                 instructions=body.instructions, repo_url=body.repo_url,
                 permissions=body.permissions)
@@ -112,10 +137,8 @@ async def create_project(body: ProjectIn, db=Depends(get_session)):
 
 
 @router.get("/projects/{project_id}")
-async def get_project(project_id: str, db=Depends(get_session)):
-    p = (await db.execute(select(Project).where(Project.id == project_id))).scalars().first()
-    if not p:
-        raise HTTPException(404, "project not found")
+async def get_project(project_id: str, db=Depends(get_session), user=Depends(get_current_user)):
+    p = await check_project_access(db, user, project_id)
     tasks = (await db.execute(
         select(ResearchTask).where(ResearchTask.project_id == project_id)
         .order_by(ResearchTask.created_at.desc())
@@ -131,10 +154,9 @@ def _t(m: ResearchTask) -> dict:
 
 
 @router.patch("/projects/{project_id}")
-async def patch_project(project_id: str, body: ProjectPatch, db=Depends(get_session)):
-    p = (await db.execute(select(Project).where(Project.id == project_id))).scalars().first()
-    if not p:
-        raise HTTPException(404, "project not found")
+async def patch_project(project_id: str, body: ProjectPatch, db=Depends(get_session),
+                        user=Depends(get_current_user)):
+    p = await check_project_access(db, user, project_id)
     data = body.model_dump(exclude_none=True)
     if "name" in data and data["name"] != p.name:
         p.slug = slugify(data["name"])
@@ -147,11 +169,10 @@ async def patch_project(project_id: str, body: ProjectPatch, db=Depends(get_sess
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, confirm: str = "", db=Depends(get_session)):
+async def delete_project(project_id: str, confirm: str = "", db=Depends(get_session),
+                         user=Depends(get_current_user)):
     """Destructive: requires explicit confirm=project-name (directive §16)."""
-    p = (await db.execute(select(Project).where(Project.id == project_id))).scalars().first()
-    if not p:
-        raise HTTPException(404, "project not found")
+    p = await check_project_access(db, user, project_id)
     if confirm != p.name:
         raise HTTPException(400, "destructive operation: pass ?confirm=<exact project name>")
     await db.delete(p)
@@ -161,8 +182,10 @@ async def delete_project(project_id: str, confirm: str = "", db=Depends(get_sess
 # ---------------------------------------------------------------- export / import (portability)
 
 @router.get("/projects/{project_id}/export")
-async def export_project(project_id: str):
+async def export_project(project_id: str, user=Depends(get_current_user),
+                         db=Depends(get_session)):
     from ..engine.export_import import dump_project
+    await check_project_access(db, user, project_id)
     try:
         bundle = await dump_project(project_id)
     except ValueError as e:
@@ -171,9 +194,11 @@ async def export_project(project_id: str):
 
 
 @router.post("/projects/import", status_code=201)
-async def import_project_bundle(bundle: dict, name: str = ""):
+async def import_project_bundle(bundle: dict, name: str = "",
+                                user=Depends(get_current_user)):
     from ..engine.export_import import import_project
-    r = await import_project(bundle, name_override=name)
+    r = await import_project(bundle, name_override=name,
+                             owner_id=user["id"] if auth_enabled() else None)
     if not r.get("ok"):
         raise HTTPException(400, r.get("error", "import failed"))
     return r
