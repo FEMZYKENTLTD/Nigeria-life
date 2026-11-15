@@ -18,6 +18,13 @@ from ..security.auth import LOCAL_USER_ID, get_current_user, is_admin, require_a
 router = APIRouter(tags=["users"])
 
 
+@router.get("/me")
+async def me(user=Depends(get_current_user)):
+    """Who am I? The dashboard uses this as the single source of truth for
+    the caller's identity and role after login."""
+    return user
+
+
 class RoleIn(BaseModel):
     role: str  # admin | member
 

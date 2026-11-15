@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { api, Project } from "./api";
+import { authRequired, loadSession, signOut, type Me } from "./auth";
 import Overview from "./pages/Overview";
 import Workspace from "./pages/Workspace";
 import Access from "./pages/Access";
@@ -11,7 +12,9 @@ import Analytics from "./pages/Analytics";
 import Reports from "./pages/Reports";
 import GitHub from "./pages/GitHub";
 import DataOps from "./pages/DataOps";
-import { useFetch } from "./components/ui";
+import Login from "./pages/Login";
+import Users from "./pages/Users";
+import { Spinner, useFetch } from "./components/ui";
 
 const NAV = [
   { to: "/", label: "Overview", icon: "◈" },
@@ -25,6 +28,8 @@ const NAV = [
   { to: "/github", label: "GitHub Integration", icon: "⎇" },
   { to: "/data", label: "Data & Ops", icon: "◫" },
 ];
+
+const ADMIN_NAV = [{ to: "/users", label: "Users & Activity", icon: "⚉" }];
 
 function ProjectBar() {
   const { data: projects, reload } = useFetch(() => api.projects(), []);
@@ -60,8 +65,53 @@ function selectedProjectId() {
   return localStorage.getItem("rice.project") || "";
 }
 
+function UsersGate({ me, children }: { me: Me; children: ReactNode }) {
+  if (me.role !== "admin") return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [booted, setBooted] = useState(false);
+
+  useEffect(() => {
+    if (!authRequired()) {
+      // local-first: single local operator, implicit admin
+      setMe({ id: "local", email: "local@rice.local", display_name: "Local operator", role: "admin" });
+      setBooted(true);
+      return;
+    }
+    if (!loadSession()) {
+      setBooted(true);
+      return;
+    }
+    api
+      .me()
+      .then((u) => setMe(u))
+      .catch(() => {
+        // stale/invalid session → force re-login
+        void signOut();
+        setMe(null);
+      })
+      .finally(() => setBooted(true));
+  }, []);
+
+  if (!booted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-ink">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (authRequired() && !me) {
+    return <Login onAuthed={setMe} />;
+  }
+
+  const user = me!;
+  const nav = user.role === "admin" ? [...NAV, ...ADMIN_NAV] : NAV;
   const { data: health } = useFetch(() => api.health(), []);
+
   return (
     <div className="flex min-h-screen bg-ink">
       {/* sidebar */}
@@ -76,7 +126,7 @@ export default function App() {
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
@@ -95,6 +145,27 @@ export default function App() {
           ))}
         </nav>
         <div className="border-t border-line px-5 py-3 text-[10px] leading-relaxed text-faint">
+          {user.id !== "local" && (
+            <div className="mb-2 flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] font-medium text-white">
+                  {user.display_name || user.email}
+                </div>
+                <div className="truncate text-[10px]">
+                  {user.email} · {user.role}
+                </div>
+              </div>
+              <button
+                className="btn !px-2 !py-1 text-[10px]"
+                onClick={() => {
+                  void signOut().then(() => setMe(null));
+                }}
+                title="Sign out"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full ${health ? "bg-good" : "bg-bad"}`} />
             {health ? `API online · AI: ${health.ai_provider}` : "API offline"}
@@ -125,6 +196,15 @@ export default function App() {
             <Route path="/reports" element={<Reports pid={selectedProjectId()} />} />
             <Route path="/github" element={<GitHub pid={selectedProjectId()} />} />
             <Route path="/data" element={<DataOps pid={selectedProjectId()} />} />
+            <Route
+              path="/users"
+              element={
+                <UsersGate me={user}>
+                  <Users />
+                </UsersGate>
+              }
+            />
+            <Route path="/login" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
