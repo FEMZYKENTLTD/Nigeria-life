@@ -50,13 +50,13 @@ export default function Analytics({ pid }: { pid: string }) {
         <Card title="Coverage & completeness" action={<button className="btn" onClick={reload}>↻ recompute</button>}>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={coverageData} margin={{ top: 8, right: 8, bottom: 8, left: -18 }}>
-              <CartesianGrid stroke="#22222b" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: "#9a97a3", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#9a97a3", fontSize: 11 }} domain={[0, 100]} />
+              <CartesianGrid stroke="#283453" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: "#97a3c0", fontSize: 11 }} />
+              <YAxis tick={{ fill: "#97a3c0", fontSize: 11 }} domain={[0, 100]} />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                 {coverageData.map((_, i) => (
-                  <Cell key={i} fill={i === 3 ? "#c9a227" : "#3a3a46"} />
+                  <Cell key={i} fill={i === 3 ? "#c17d4f" : "#1b2540"} />
                 ))}
               </Bar>
             </BarChart>
@@ -68,11 +68,11 @@ export default function Analytics({ pid }: { pid: string }) {
           {byCategory.length ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={byCategory} layout="vertical" margin={{ top: 4, right: 12, bottom: 4, left: 30 }}>
-                <CartesianGrid stroke="#22222b" horizontal={false} />
-                <XAxis type="number" tick={{ fill: "#9a97a3", fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={110} tick={{ fill: "#9a97a3", fontSize: 11 }} />
+                <CartesianGrid stroke="#283453" horizontal={false} />
+                <XAxis type="number" tick={{ fill: "#97a3c0", fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={110} tick={{ fill: "#97a3c0", fontSize: 11 }} />
                 <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="value" fill="#c9a227" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="value" fill="#c17d4f" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (

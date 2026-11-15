@@ -1,25 +1,29 @@
 /** @type {import('tailwindcss').Config} */
+// Premium palette: "Midnight & Copper" — deep midnight-blue base, ivory text,
+// restrained copper accents. Deliberately not the near-black + gold cliché.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        ink: "#0a0a0c",
-        charcoal: "#131318",
-        panel: "#17171e",
-        panel2: "#1d1d26",
-        line: "#26262f",
+        ink: "#0d1322",
+        charcoal: "#121a2e",
+        panel: "#151e33",
+        panel2: "#1b2540",
+        line: "#283453",
+        // token names kept (copper is the accent)
         gold: {
-          DEFAULT: "#c9a227",
-          soft: "#e6c96a",
-          dim: "#8a6d1a",
+          DEFAULT: "#c17d4f",
+          soft: "#e3ab84",
+          dim: "#8f5f3d",
         },
-        muted: "#9a97a3",
-        faint: "#6b6875",
-        good: "#4ade80",
-        warn: "#facc15",
-        bad: "#f87171",
-        info: "#7dd3fc",
+        ivory: "#ece7db",
+        muted: "#97a3c0",
+        faint: "#5e6a8a",
+        good: "#43d692",
+        warn: "#f2b23e",
+        bad: "#ef6a6a",
+        info: "#6fb1ff",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "Segoe UI", "Roboto", "Helvetica Neue", "sans-serif"],

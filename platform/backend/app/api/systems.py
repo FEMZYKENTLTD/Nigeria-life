@@ -104,8 +104,8 @@ async def list_reports(project_id: str, db=Depends(get_session)):
 async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_session)):
     if body.type not in REPORT_TYPES:
         raise HTTPException(400, f"unknown report type; options: {', '.join(REPORT_TYPES)}")
-    if body.format not in ("md", "json", "csv", "html"):
-        raise HTTPException(400, "format must be md|json|csv|html")
+    if body.format not in ("md", "json", "csv", "html", "pdf"):
+        raise HTTPException(400, "format must be md|json|csv|html|pdf")
     ctx = await _ctx(project_id, db)
     ctx["analytics"] = analytics.full_project_analytics(
         ctx["project"], ctx["pages"], ctx["features"],
@@ -123,15 +123,25 @@ async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_ses
     await db.flush()
     out_dir = os.path.join(s.data_dir, "reports", project_id)
     os.makedirs(out_dir, exist_ok=True)
-    ext = {"md": "md", "json": "json", "csv": "csv", "html": "html"}[body.format]
+    ext = {"md": "md", "json": "json", "csv": "csv", "html": "html", "pdf": "pdf"}[body.format]
     path = os.path.join(out_dir, f"{body.type}-{report.id}.{ext}")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+    if body.format == "pdf":
+        import base64
+
+        raw = base64.b64decode(content.split(",", 1)[1])
+        with open(path, "wb") as f:
+            f.write(raw)
+        # knowledge gets the markdown source of truth, never base64
+        kb_body = render_report(body.type, ctx, "md")[:12000]
+    else:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        kb_body = content[:12000]
     report.file_path = os.path.relpath(path, s.data_dir)
     db.add(ActivityLog(project_id=project_id, actor="system", action="report.generated",
                        subject=report.title))
     await db.commit()
-    await upsert_knowledge(project_id, "report", report.id, report.title, content[:12000])
+    await upsert_knowledge(project_id, "report", report.id, report.title, kb_body)
     return {"id": report.id, "title": report.title, "format": body.format, "chars": len(content)}
 
 
@@ -327,3 +337,30 @@ async def import_package(project_id: str, docs_dir: str = "docs/research", db=De
     db.add(ActivityLog(project_id=project_id, actor="import", action="import.complete",
                        subject=docs_dir, detail=str(counts)))
     return {"imported": counts, "from": full}
+
+
+# ---------------------------------------------------------------- system: backup / plugins
+
+@router.post("/systems/backup")
+async def systems_backup():
+    from ..engine.export_import import create_backup
+    r = await create_backup()
+    if not r.get("ok"):
+        raise HTTPException(503, r.get("error", "backup failed"))
+    return r
+
+
+@router.get("/systems/backups")
+async def systems_backups():
+    from ..engine.export_import import list_backups
+    return list_backups()
+
+
+@router.get("/plugins")
+async def plugins_list():
+    from ..engine.plugins import KINDS, discover, registry
+
+    discover()
+    return {kind: [{"name": p.name, "source": p.meta.get("source", "unknown"),
+                    "description": p.meta.get("description", "")}
+                   for p in registry.list(kind)] for kind in KINDS}

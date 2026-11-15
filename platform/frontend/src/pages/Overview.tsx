@@ -2,7 +2,7 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recha
 import { api } from "../api";
 import { Card, ErrorNote, Kpi, Spinner, StatusPill, timeAgo, useFetch, fmtPct } from "../components/ui";
 
-const GOLD = "#c9a227";
+const GOLD = "#c17d4f";
 
 export default function Overview({ pid }: { pid: string }) {
   const { data, error, loading } = useFetch(() => api.overview(), []);
@@ -65,7 +65,7 @@ export default function Overview({ pid }: { pid: string }) {
                 <Pie data={confData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80}
                   stroke="none">
                   {confData.map((_, i) => (
-                    <Cell key={i} fill={[GOLD, "#4a4a55", "#2b2b33"][i % 3]} />
+                    <Cell key={i} fill={[GOLD, "#1b2540", "#151e33"][i % 3]} />
                   ))}
                 </Pie>
                 <Tooltip contentStyle={tooltipStyle} />
@@ -133,9 +133,9 @@ export default function Overview({ pid }: { pid: string }) {
 }
 
 export const tooltipStyle = {
-  background: "#17171e",
-  border: "1px solid #26262f",
+  background: "#151e33",
+  border: "1px solid #283453",
   borderRadius: 8,
   fontSize: 12,
-  color: "#e8e6df",
+  color: "#ece7db",
 };

@@ -10,6 +10,7 @@ import Knowledge from "./pages/Knowledge";
 import Analytics from "./pages/Analytics";
 import Reports from "./pages/Reports";
 import GitHub from "./pages/GitHub";
+import DataOps from "./pages/DataOps";
 import { useFetch } from "./components/ui";
 
 const NAV = [
@@ -22,6 +23,7 @@ const NAV = [
   { to: "/analytics", label: "Analytics", icon: "◍" },
   { to: "/reports", label: "Reports", icon: "≡" },
   { to: "/github", label: "GitHub Integration", icon: "⎇" },
+  { to: "/data", label: "Data & Ops", icon: "◫" },
 ];
 
 function ProjectBar() {
@@ -122,6 +124,7 @@ export default function App() {
             <Route path="/analytics" element={<Analytics pid={selectedProjectId()} />} />
             <Route path="/reports" element={<Reports pid={selectedProjectId()} />} />
             <Route path="/github" element={<GitHub pid={selectedProjectId()} />} />
+            <Route path="/data" element={<DataOps pid={selectedProjectId()} />} />
           </Routes>
         </main>
       </div>

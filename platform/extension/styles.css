@@ -1,18 +1,18 @@
 :root {
-  --ink: #0a0a0c;
-  --panel: #17171e;
-  --line: #26262f;
-  --gold: #c9a227;
-  --gold-soft: #e6c96a;
-  --muted: #9a97a3;
-  --faint: #6b6875;
+  --ink: #0d1322;
+  --panel: #151e33;
+  --line: #283453;
+  --gold: #c17d4f;
+  --gold-soft: #e3ab84;
+  --muted: #97a3c0;
+  --faint: #5e6a8a;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   background: var(--ink);
-  color: #e8e6df;
+  color: #ece7db;
   padding: 14px;
 }
 header h1 {
@@ -26,14 +26,14 @@ section { margin-bottom: 12px; }
 label { display: block; color: var(--muted); font-size: 11px; margin: 8px 0 3px; }
 input, select, textarea {
   width: 100%;
-  background: #131318;
+  background: #121a2e;
   border: 1px solid var(--line);
   color: #fff;
   border-radius: 8px;
   padding: 7px 9px;
   font: inherit;
 }
-input:focus, select:focus, textarea:focus { outline: none; border-color: #8a6d1a; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #8f5f3d; }
 .card-title {
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -42,7 +42,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #8a6d1a
   margin-bottom: 6px;
 }
 .tab-preview {
-  background: #131318;
+  background: #121a2e;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 10px;
@@ -65,7 +65,7 @@ button {
   background: #1d1d26;
   color: #fff;
 }
-button.primary { background: rgba(138, 109, 26, 0.25); border-color: #8a6d1a; color: var(--gold-soft); }
+button.primary { background: rgba(143, 95, 61, 0.25); border-color: #8f5f3d; color: var(--gold-soft); }
 button.primary:hover { background: rgba(138, 109, 26, 0.4); }
 button.secondary { background: transparent; color: var(--muted); }
 button.small { width: auto; margin-left: 6px; }

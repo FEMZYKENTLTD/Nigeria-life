@@ -156,3 +156,24 @@ async def delete_project(project_id: str, confirm: str = "", db=Depends(get_sess
         raise HTTPException(400, "destructive operation: pass ?confirm=<exact project name>")
     await db.delete(p)
     return {"deleted": p.name}
+
+
+# ---------------------------------------------------------------- export / import (portability)
+
+@router.get("/projects/{project_id}/export")
+async def export_project(project_id: str):
+    from ..engine.export_import import dump_project
+    try:
+        bundle = await dump_project(project_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return bundle
+
+
+@router.post("/projects/import", status_code=201)
+async def import_project_bundle(bundle: dict, name: str = ""):
+    from ..engine.export_import import import_project
+    r = await import_project(bundle, name_override=name)
+    if not r.get("ok"):
+        raise HTTPException(400, r.get("error", "import failed"))
+    return r

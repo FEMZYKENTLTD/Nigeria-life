@@ -155,8 +155,51 @@ decision instead):
   every fetch; visible and editable in the dashboard (Data & Access).
 - [x] Tests: `tests/test_access.py` (11) — suite total 49 passed.
 
+## Stage 8 — Premium theme + extensibility, offline document output, portability ✅
+
+The "extremely advanced and exceptionally functional" increment — delivered
+within the standing constraints (no stealth/evasion, honest failure,
+local-first, no hardcoded target). The "undetectable / not limited by any
+rules" half was **declined** (it conflicts with the user's own §5 no-stealth
+rule and with the evidence-integrity contract) and is documented as such.
+
+- [x] **Premium theme swap (not gold/black).** "Midnight & Copper" palette
+  (midnight-blue base, ivory text, copper accent) applied by changing token
+  *values* only, in `tailwind.config.js`, `src/theme.css`, `components/ui.tsx`,
+  the extension `styles.css` and the report HTML/PDF templates — so no
+  component logic changed. `npm run build` clean.
+- [x] **Plugin architecture** — `engine/plugins.py` registry with four
+  extensible kinds (`ai_provider`, `browser_engine`, `report_format`,
+  `analysis_module`). Built-ins register at boot; third-party plugins via the
+  `rice.plugins` entry-point group; a failing plugin is logged and skipped
+  (can't take the core down). Read-only `GET /api/plugins` + a dashboard
+  panel.
+- [x] **PDF report format** — `engine/pdf.py`, a dependency-free multi-page
+  A4 PDF 1.4 writer (Helvetica/Helvetica-Bold, correct xref/startxref,
+  200-page cap). Added as a 5th report format end-to-end (generator → data
+  URL in `reports` → `.pdf` on disk → dashboard viewer + download).
+- [x] **Database backups** — `POST /api/systems/backup` (WAL checkpoint +
+  consistent copy, retention 20) and `GET /api/systems/backups`; Postgres
+  deployments get an honest 503 pointing at the documented `pg_dump` path.
+- [x] **Project export/import (portability)** — `GET /api/projects/{id}/export`
+  (versioned JSON bundle; evidence refs normalised to positional indices) and
+  `POST /api/projects/import` (fresh ids, remapped cross-references, fully
+  isolated new project; robots exceptions/approvals deliberately do not
+  travel).
+- [x] **Dashboard: Data & Ops section** — backup create/list, plugin
+  registry by kind, project export (download) + import (new isolated project).
+- [x] Tests: `tests/test_dataops.py` (8) — suite total **57 passed**.
+
 ## What is NOT claimed
 
+- **No detection-evasion / "undetectable" / "unrestricted" behaviour.** The
+  latest directive asked for the engine to be "undetectable" and "not limited
+  by any rules." That half was **declined**: it directly contradicts the
+  user's own §5 (no stealth, no bypassing access controls or source
+  restrictions) and the platform's evidence-integrity + honest-failure
+  contract. All collection remains declared, polite, permission-gated, and
+  auditable. The "advanced/functional" half of the directive is what Stage 8
+  delivers.
 - No live captures of lagoslife.app or any external site were made in this
   sandbox (no network path, per the existing investigation log). All live-data
   features are demonstrable against any reachable target and against local

@@ -300,4 +300,17 @@ export const api = {
       docs_tree: { path: string; size: number }[];
     }>("/api/github/status"),
   githubSync: () => post<{ synced: boolean; docs: number; digest: string }>("/api/github/sync"),
+
+  // ---- Data & Ops: backup, plugins, project portability
+  createBackup: () =>
+    post<{ ok: boolean; path: string; bytes: number; kept: number }>("/api/systems/backup"),
+  listBackups: () =>
+    req<{ name: string; path: string; bytes: number; modified: string }[]>("/api/systems/backups"),
+  plugins: () =>
+    req<Record<string, { name: string; source: string; description: string }[]>>("/api/plugins"),
+  exportProject: (pid: string) =>
+    req<Record<string, unknown>>(`/api/projects/${pid}/export`),
+  importProject: (bundle: Record<string, unknown>, name = "") =>
+    post<{ ok: boolean; project_id: string; counts: Record<string, number> }>(
+      `/api/projects/import?name=${encodeURIComponent(name)}`, bundle),
 };
