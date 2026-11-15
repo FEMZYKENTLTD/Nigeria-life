@@ -50,8 +50,8 @@ Design principles, enforced in code:
        │                       │                               │
 ┌──────▼───────┐   ┌───────────▼──────────┐   ┌────────────────▼────────────┐
 │ Storage      │   │ Engine layer         │   │ Integrations                │
-│ SQLite (WAL) │   │ planner · agent_loop │   │ ai/  offline | openai-compat│
-│ 21 tables    │   │ page_understanding   │   │        | ollama (pluggable) │
+│  SQLite (WAL) │   │ planner · agent_loop │   │ ai/  offline | openai-compat│
+│ 25 tables    │   │ page_understanding   │   │        | ollama (pluggable) │
 │ platform/    │   │ feature_engine       │   │ browser/ chromium|firefox   │
 │ data/rice.db │   │ analytics · reports  │   │          |webkit (adapters) │
 │ → Postgres   │   │ knowledge (TF-IDF)   │   │ github_int/ gh CLI, local   │
@@ -71,7 +71,8 @@ platform/
 │   │   ├── models.py          # 21 SQLAlchemy models (the contract)
 │   │   ├── schemas.py         # Pydantic response schemas
 │   │   ├── logging_conf.py    # structured JSON logging
-│   │   ├── api/               # routers: projects, research, tasks, systems
+│   │   ├── api/               # routers: projects, research, tasks, systems,
+│   │   │                        #   access (scopes/connectors/assets/manual)
 │   │   ├── engine/
 │   │   │   ├── planner.py           # objective → typed subtask graph
 │   │   │   ├── agent_loop.py        # autonomous execution + permission gates
@@ -82,6 +83,11 @@ platform/
 │   │   │   ├── knowledge.py         # TF-IDF semantic search + upserts
 │   │   │   ├── evidence_import.py   # docs/research package → project
 │   │   │   ├── textsim.py           # token/Jaccard similarity utilities
+│   │   │   ├── robots.py            # robots.txt compliance (TTL-cached)
+│   │   │   ├── politeness.py        # sha256 + ETag/Last-Modified headers
+│   │   │   ├── http_fetch.py        # polite GET capture + fetch cache
+│   │   │   ├── api_connect.py       # official API connectors (env creds)
+│   │   │   ├── data_import.py       # licensed CSV/JSON/XML → findings
 │   │   │   └── browser/             # base adapter, engines, session manager
 │   │   ├── ai/                  # base, offline, openai_compat, registry
 │   │   └── github_int/          # gh CLI wrapper + local checkout + write gate
@@ -101,7 +107,7 @@ platform/
     └── rice.db                # SQLite (WAL)
 ```
 
-## 4. Data model (21 tables, `models.py`)
+## 4. Data model (25 tables, `models.py`)
 
 All primary keys are ULIDs (time-sortable, collision-safe strings); every
 domain row carries `project_id` for isolation; timestamps are ISO-8601 UTC.
@@ -128,6 +134,10 @@ domain row carries `project_id` for isolation; timestamps are ISO-8601 UTC.
 | `github_state` | last sync state, digested docs, defaults |
 | `activity_logs` | actor (user/agent/system), action, subject, detail |
 | `agent_runs` | per run: mode, status, started/ended, task ids |
+| `collection_scopes` | per-project, per-domain access declaration: allowed methods (browser/http/manual/api), min delay, page cap, robots posture. `robots_mode=approved_exception` is only ever set by an approved `permission_change` decision |
+| `api_connectors` | official API of a target/provider: base URL, auth type, credential **env var name** (value never stored), endpoints, sync state |
+| `data_assets` | licensed/purchased datasets: filename, format, provenance, license, row count, linked evidence |
+| `fetch_cache` | ETag / Last-Modified / content-sha per URL per project — 304 and unchanged content short-circuit re-processing |
 
 Storage engine: **SQLite in WAL mode** (`journal_mode=WAL`,
 `busy_timeout=8000`, `synchronous=NORMAL`) — the documented, tested concurrency
@@ -146,7 +156,9 @@ POST /api/tasks/{id}/run                 hand to scheduler → asyncio task
       ▼
 planner.plan(objective)                  typed subtask graph:
       discover → fetch* → understand → document → analyse → report
-      (*fetch only if a source is authorised AND a browser is capable)
+      (*fetch only if the scope allows a method, robots.txt permits it
+        (or a human-approved exception), the page cap is not hit, AND a
+        capable collector is available)
       │
       ▼
 agent_loop.execute_task                  for-iteration (hard cap 250, loud
@@ -181,8 +193,11 @@ Consequential actions stop at a `Decision` row and surface in the dashboard
 (AI Agent Centre) and in the API (`/api/agent/status` → `pending_decisions`):
 
 1. **New third-party source** — registered `pending_approval`; scheduler will
-   not touch it until approved.
-2. **Permission change** — per-project scope expansion requires approval.
+   not touch it until approved (covers registered API connectors too).
+2. **Permission change** — per-project scope expansion requires approval,
+   including **robots.txt exceptions**: the request saves the scope with
+   `respect` posture and a pending decision; only approval flips it to
+   `approved_exception` (with the sign-off recorded on the scope row).
 3. **Manual evidence** — when a source disallows automation (or no browser is
    available), the agent asks for a human to import evidence instead of
    evading the restriction.
@@ -259,7 +274,40 @@ Lexical semantic search: TF-IDF cosine over normalised tokens of versioned
 Incremental upserts after every document step; `is_current` + version
 history so superseded entries remain auditable. **Works fully offline.**
 
-### 6.7 Evidence import (`evidence_import.py`)
+### 6.7 Data & Access engines (sanctioned collection)
+
+**`robots.py` — robots.txt compliance (politeness, not evasion).** Each
+domain's robots.txt is fetched once per hour and applied with a declared
+User-Agent: readable file → followed; 404 → nothing disallowed; 401/400/403
+(unreadable) → safe default *disallowed*; network error → `unknown`
+(proceed, and let the fetch fail honestly). A scope row may carry
+`robots_mode=approved_exception` — set **only** through an approved
+`permission_change` decision with the sign-off recorded on the row. A
+disallowed URL raises a PermissionGate (manual-evidence decision) — never a
+bypass.
+
+**`politeness.py` + `http_fetch.py` — polite HTTP capture.** A plain `httpx`
+GET (declared UA, no header spoofing, no stealth) with per-scope delay and
+ETag / Last-Modified conditional re-requests: 304 or unchanged content-sha is
+a cache hit (`fetch_cache`) and the page is not re-processed. No rendering —
+JS-only content falls through to the browser path or the manual gate.
+`http_fetch` records pages with the same idempotent upsert as the browser
+path, so the understand/document pipeline treats both identically.
+
+**`api_connect.py` — official API connectors.** A connector declares the
+target's official API (base URL, endpoints, auth type). The credential is
+referenced by **env var name only**; the value is read from the host
+environment at call time, never stored/logged, and if it ever appears in the
+returned data the import is aborted. Connectors start `pending_approval`
+(`new_source` decision) and sync with a politeness delay between endpoint
+calls; rows become observations (class C) linked to per-endpoint evidence.
+
+**`data_import.py` — licensed dataset import.** CSV/JSON/XML the researcher
+lawfully holds, with **mandatory provenance** and license, become one
+evidence item (class per the researcher's choice) plus per-row observations
+citing it, with a documented row cap.
+
+### 6.8 Evidence import (`evidence_import.py`)
 
 Ingests a Markdown research package (README, investigation log, page
 inventory, feature inventory, evidence register, findings) into a project
@@ -318,13 +366,14 @@ The key never appears in logs, activity records, reports or evidence.
 ## 10. Frontend
 
 React 18 + TypeScript + Vite 5 + Tailwind 3 + Recharts, dark/gold theme.
-Eight sections, all wired to live API data with a global project selector:
+Nine sections, all wired to live API data with a global project selector:
 
 | Section | Data |
 |---|---|
 | Overview | KPIs, completeness + formula, confidence pie, activity feed, project cards |
 | Research Workspace | new-objective form → agent run; task queue with subtask states; page/feature inventories; open questions; source approval list |
 | AI Agent Centre | provider state, **pending-decision approve/reject**, task queue, activity log, run history |
+| Data & Access | collection scopes (methods/delay/cap/robots posture + exception requests), API connectors (register/approve/sync), licensed data assets (upload/import), manual-evidence queue + capture form + robots.txt check |
 | Browser Management | engine health (re-probe), profiles CRUD, session history with honest error reasons |
 | Knowledge Base | semantic search (scored, with the method explained), evidence explorer with C/S/I/H/U pills, feature relationship graph |
 | Analytics | coverage bars, category chart, contradictions, duplicates, missing info, opportunity ranking table with components |
@@ -342,12 +391,16 @@ single origin (no CORS needed). All client URLs are relative.
 - **Task recovery** on boot (in-flight → re-queued with reason).
 - **Idempotent upserts** everywhere (knowledge, features, pages, evidence).
 - **Concurrency recipe:** WAL + busy_timeout + commit-before-nested-upsert.
-- **Safety caps:** 250-iteration agent loop cap with loud failure; per-session
-  page caps; retry caps with backoff.
-- **Tests:** 38 tests — page understanding (9), analytics (10), reports (6),
+- **Safety caps:** 250-iteration agent loop cap with loud failure; per-scope
+  page caps (excess fetch subtasks are *skipped with an explanation*);
+  retry caps with backoff; import row caps.
+- **Tests:** 49 tests — page understanding (9), analytics (10), reports (6),
   knowledge (4), evidence import vs the real package (1), agent e2e (4: full
-  pipeline, gate→decision→reject→skip, loud failure, recovery), API (4).
-  Evidence in `docs/platform/ACCEPTANCE.md`.
+  pipeline, gate→decision→reject→skip, loud failure, recovery), API (4),
+  data & access (11: ETag/304 cache, robots gate, robots-exception approval,
+  page-cap skip, full HTTP pipeline, dataset import × formats, connector
+  flow + credential hygiene + missing-env honesty, manual capture + batch,
+  manual queue + robots check). Evidence in `docs/platform/ACCEPTANCE.md`.
 
 ## 12. Configuration (env, prefix `RICE_`)
 

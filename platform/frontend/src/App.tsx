@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { api, Project } from "./api";
 import Overview from "./pages/Overview";
 import Workspace from "./pages/Workspace";
+import Access from "./pages/Access";
 import AgentCentre from "./pages/AgentCentre";
 import Browsers from "./pages/Browsers";
 import Knowledge from "./pages/Knowledge";
@@ -15,6 +16,7 @@ const NAV = [
   { to: "/", label: "Overview", icon: "◈" },
   { to: "/workspace", label: "Research Workspace", icon: "⌘" },
   { to: "/agent", label: "AI Agent Centre", icon: "✦" },
+  { to: "/access", label: "Data & Access", icon: "⛨" },
   { to: "/browsers", label: "Browser Management", icon: "▣" },
   { to: "/knowledge", label: "Knowledge Base", icon: "❖" },
   { to: "/analytics", label: "Analytics", icon: "◍" },
@@ -114,6 +116,7 @@ export default function App() {
             <Route path="/" element={<Overview pid={selectedProjectId()} />} />
             <Route path="/workspace" element={<Workspace pid={selectedProjectId()} />} />
             <Route path="/agent" element={<AgentCentre pid={selectedProjectId()} />} />
+            <Route path="/access" element={<Access pid={selectedProjectId()} />} />
             <Route path="/browsers" element={<Browsers pid={selectedProjectId()} />} />
             <Route path="/knowledge" element={<Knowledge pid={selectedProjectId()} />} />
             <Route path="/analytics" element={<Analytics pid={selectedProjectId()} />} />

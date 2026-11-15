@@ -99,7 +99,44 @@ Observed:
   - `GET /api/projects/{id}/analytics` → all metric shapes consumed by the
     charts (score/components/explanation) verified field-by-field.
 
-## 5. Constraints honored (spot checks)
+## 5. Data & Access increment (sanctioned collection hardening)
+
+Command: `cd platform/backend && .venv/bin/python -m pytest tests/ -q`
+
+```
+49 passed in 44.21s
+```
+
+New: `tests/test_access.py` — **11 passed**, all capture against a local
+HTTP server (no external network in tests):
+
+| Test | Proves |
+|---|---|
+| `test_http_fetch_etag_cache` | first GET 200 → page recorded + `fetch_cache` with ETag; second GET sends `If-None-Match`, gets **304**, reported as cache hit; exactly one page row |
+| `test_robots_gate_parks_task` | a robots-disallowed URL parks the task at `waiting_decision` with a `manual_evidence` decision whose question cites robots.txt — **and the URL is never captured** |
+| `test_robots_exception_approval_allows_fetch` | scope requesting an exception stays `respect` until the human approves the `permission_change` decision; after approval the same URL fetches and the task completes |
+| `test_scope_page_cap_skips_honestly` | with `max_pages=1`, fetch 1 completes; fetches 2–3 are `skipped` with "collection page cap reached…" — not silently dropped |
+| `test_agent_http_pipeline_end_to_end` | full agent run (fetch→understand→document→analyse→report) over a local target via the polite HTTP method → `complete`, page documented, ≥2 features, report generated |
+| `test_data_import_formats` | CSV/JSON/XML → rows become observations, each citing exactly one evidence item; provenance+license recorded |
+| `test_data_import_requires_provenance_and_rejects_bad_file` | missing provenance refused; malformed JSON refused with the parse reason |
+| `test_connector_flow_and_sync` | register → `pending_approval` + decision; invalid definitions rejected (400); approval → `active`; sync → 2 rows → 2 observations + 1 evidence (`api_connector`); **credential value never present in stored findings** |
+| `test_connector_missing_env_is_honest_error` | missing env var → sync fails with the env var name in the error, connector marked `error` — no crash, no fake success |
+| `test_manual_capture_and_batch_import` | manual capture (HTML + screenshot) → documented page + class-C evidence + screenshot file on disk; 2-page batch import OK |
+| `test_manual_queue_and_robots_check` | manual-queue lists the pending decision + the blocked fetch with its reason; robots-check reports `disallowed`/`allowed` read-only |
+
+Live verification (seeded project, real server):
+
+- new tables `collection_scopes`, `api_connectors`, `data_assets`,
+  `fetch_cache` auto-created in `platform/data/rice.db`;
+- `POST /scope` with a robots-exception request returns
+  `robots_exception_pending: true` with posture kept at `respect`; the
+  pending `permission_change` decision is visible in the dashboard
+  (AI Agent Centre) awaiting the researcher;
+- `GET /robots-check` for an unreachable domain returns `unknown` with the
+  network reason — the engine does not guess and does not block;
+- full regression: the original 38 tests still pass alongside the new 11.
+
+## 6. Constraints honored (spot checks)
 
 - No target/product/feature name appears in `platform/backend/app/`
   (grep-clean; Lagos Life exists only as data).
@@ -110,7 +147,7 @@ Observed:
 - `.gitignore` keeps `platform/data/`, `node_modules/`, `dist/`, `.venv/`
   out of the source tree; runtime data stays local-first.
 
-## 6. Not verified here (honest gap list)
+## 7. Not verified here (honest gap list)
 
 | Item | Why | Mitigation |
 |---|---|---|

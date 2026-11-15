@@ -442,3 +442,87 @@ class AgentRun(Base):
     log: Mapped[list] = mapped_column(JSON, default=list)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ---------------------------------------------------------------- collection scope (sanctioned access)
+
+class CollectionScope(Base):
+    """Per-project, per-domain collection scope declaration.
+
+    The agent reads this before every automated fetch: which collection
+    methods are allowed, politeness (delay, page cap) and the robots.txt
+    posture. ``robots_mode = "approved_exception"`` is only ever set through
+    an approved human decision (kind=permission_change) — never directly."""
+    __tablename__ = "collection_scopes"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    domain: Mapped[str] = mapped_column(String(300), default="*")  # exact domain or "*" default
+    allowed_methods: Mapped[list] = mapped_column(JSON, default=list)  # browser|http|manual|api
+    min_delay_s: Mapped[float] = mapped_column(Float, default=2.0)
+    max_pages: Mapped[int] = mapped_column(Integer, default=40)
+    robots_mode: Mapped[str] = mapped_column(String(24), default="respect")  # respect|approved_exception
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ---------------------------------------------------------------- api connectors
+
+class ApiConnector(Base):
+    """Official API of a target site / data provider, used with the
+    researcher's own credentials. The credential is referenced by ENV VAR
+    NAME ONLY — the value is read from the host environment at call time
+    and is never stored, logged or written into research files."""
+    __tablename__ = "api_connectors"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(300))
+    base_url: Mapped[str] = mapped_column(String(700))
+    auth_type: Mapped[str] = mapped_column(String(16), default="none")  # none|bearer|key
+    env_var: Mapped[str] = mapped_column(String(80), default="")  # env var NAME, never the value
+    key_header: Mapped[str] = mapped_column(String(80), default="X-API-Key")
+    endpoints: Mapped[list] = mapped_column(JSON, default=list)  # [{name, path, method}]
+    status: Mapped[str] = mapped_column(String(24), default="pending_approval")  # pending_approval|active|error
+    last_sync_at: Mapped[str] = mapped_column(String(40), default="")
+    last_sync: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ---------------------------------------------------------------- data assets
+
+class DataAsset(Base):
+    """A licensed / purchased / otherwise legally obtained dataset imported
+    into a project. Provenance + license are mandatory on the Evidence row."""
+    __tablename__ = "data_assets"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(300))
+    filename: Mapped[str] = mapped_column(String(300), default="")
+    format: Mapped[str] = mapped_column(String(12), default="")  # csv|json|xml
+    provenance: Mapped[str] = mapped_column(Text, default="")
+    license: Mapped[str] = mapped_column(Text, default="")
+    rows: Mapped[int] = mapped_column(Integer, default=0)
+    evidence_id: Mapped[str] = mapped_column(String(32), default="")
+    status: Mapped[str] = mapped_column(String(20), default="imported")  # imported|error
+    error: Mapped[str] = mapped_column(Text, default="")
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ---------------------------------------------------------------- fetch cache
+
+class FetchCache(Base):
+    """ETag / Last-Modified cache so repeated polite fetches do not re-request
+    or re-process unchanged content (304 / unchanged-sha short-circuit)."""
+    __tablename__ = "fetch_cache"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    url: Mapped[str] = mapped_column(String(700), index=True)
+    etag: Mapped[str] = mapped_column(String(200), default="")
+    last_modified: Mapped[str] = mapped_column(String(60), default="")
+    content_sha: Mapped[str] = mapped_column(String(64), default="")
+    page_id: Mapped[str] = mapped_column(String(32), default="")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

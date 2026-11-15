@@ -24,9 +24,19 @@
   <section class="capture-preview">
     <div class="card-title">Current tab</div>
     <div id="tab" class="tab-preview">—</div>
+  </section>
+
+  <section>
+    <div class="card-title">Capture details (optional)</div>
+    <input id="title" type="text" placeholder="Title override" />
+    <textarea id="notes" rows="2" placeholder="Notes — what does this page show?"></textarea>
     <label class="chk">
       <input id="withHtml" type="checkbox" checked />
       Include rendered HTML (analysed by the page understanding engine)
+    </label>
+    <label class="chk">
+      <input id="withShot" type="checkbox" checked />
+      Include a screenshot of the visible tab
     </label>
   </section>
 
@@ -53,7 +63,8 @@
 
   <footer>
     The human is the collector: this bridge only ever sends what a person
-    looked at. No background scraping, no hidden requests.
+    looked at, on explicit click. No background scraping, no hidden requests,
+    no restriction bypass.
   </footer>
 
   <script src="sidepanel.js"></script>

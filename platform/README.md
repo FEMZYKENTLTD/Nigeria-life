@@ -59,7 +59,26 @@ cd platform/backend
 .venv/bin/python -m pytest tests/ -q        # 38 passed
 ```
 
-### 5. Browser captures (where available)
+### 5. Data & Access (dashboard section)
+
+Sanctioned collection controls, per project:
+
+- **Collection scopes** — per-domain allowed methods (`http` / `browser` /
+  `manual` / `api`), politeness delay, page cap, robots.txt posture. A
+  robots exception is a *permission change*: the request stays `respect`
+  until a human approves it in the AI Agent Centre.
+- **Polite HTTP capture** — declared UA, delays, ETag / Last-Modified
+  conditional re-requests (304 = cache hit, no re-processing).
+- **Official API connectors** — the target's official API with *your own*
+  credentials (env var name only; values never stored or logged). Starts
+  pending approval; sync on demand.
+- **Licensed data assets** — CSV/JSON/XML you lawfully hold, with mandatory
+  provenance + license; every row becomes a finding citing the evidence.
+- **Manual evidence queue** — everything the agent could not collect
+  automatically (pending decisions + blocked fetches with reasons), plus a
+  capture form and a read-only robots.txt check.
+
+### 6. Browser captures (where available)
 
 ```bash
 .venv/bin/python -m playwright install chromium   # and/or firefox, webkit
@@ -70,13 +89,16 @@ browser health service reports `installed=false` and the agent falls back to
 the manual-evidence path: it raises a `manual_evidence` decision that a
 human approves (import evidence) or rejects (capture skipped, gap stated).
 
-### 6. WebExtension evidence bridge
+### 7. WebExtension evidence bridge
 
 `chrome://extensions` → Developer mode → Load unpacked → select
-`platform/extension`. Open the side panel from the toolbar icon, pick a
-project, and capture the current page as confirmed evidence.
+`platform/extension`. Open the side panel **from the toolbar icon** (that
+click is what grants the temporary page access), pick a project, optionally
+add a title/notes, and capture the current page — rendered HTML + visible-tab
+screenshot included, posted as confirmed manual evidence. No background
+reading, no restriction bypass.
 
-### 7. Desktop (Tauri 2)
+### 8. Desktop (Tauri 2)
 
 See `platform/desktop/README.md` — scaffold + per-OS build instructions;
 no pre-built binaries are committed.
@@ -106,6 +128,8 @@ no pre-built binaries are committed.
    repository changes, destructive acts and manual-evidence swaps all stop
    at a pending decision (dashboard: AI Agent Centre).
 4. **No evasion** — no stealth, no CAPTCHA bypass, no credential storage.
-   Restricted sources use the manual-evidence path.
+   robots.txt is respected (unreadable file = safe default *disallowed*);
+   restricted sources use the manual-evidence path; a robots exception is
+   only possible through a recorded human approval.
 5. **Explained scores** — every analytics metric returns its formula and
    inputs; no arbitrary percentages.

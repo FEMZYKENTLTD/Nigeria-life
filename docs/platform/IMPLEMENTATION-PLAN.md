@@ -1,7 +1,7 @@
 # Nigeria Life Intelligence Engine — Staged Implementation Plan
 
 Status: **in progress** (see checkboxes; each item links to where it lives).
-Updated: 2026-11-14.
+Updated: 2026-11-15.
 
 The platform is **general-purpose by construction**: no module in the core
 references "Lagos Life" or any specific target. Lagos Life (the existing
@@ -128,6 +128,32 @@ pipeline — the same pipeline any future project uses.
 - [ ] Production hardening beyond sandbox: load testing against real targets,
   Tauri packaging on all three OSes, CI matrix — documented as the remaining
   external work.
+
+## Stage 7 — Sanctioned access & data ingestion (the "1 to 5" increment) ✅
+
+Hardening of the collection layer — every capability stays on the
+sanctioned side of the permission wall (nothing here bypasses a
+restriction; where automation is not allowed, the agent parks on a human
+decision instead):
+
+- [x] **Manual-evidence path strengthened** — manual capture endpoint
+  (page + notes + rendered HTML + screenshot), batch page import, and the
+  dashboard "manual evidence queue" (pending decisions + blocked fetches
+  with reasons). `api/access.py`, `tests/test_access.py`.
+- [x] **Official API connectors** — register (pending approval), sync with
+  the researcher's own credentials (env var name only; value never stored,
+  logged or persisted — leaked-in-data aborts the import).
+- [x] **Licensed data import** — CSV/JSON/XML with mandatory provenance +
+  license → evidence + per-row findings citing it.
+- [x] **Politeness-hardened capture** — declared UA, per-scope delays,
+  page caps (excess = explained `skipped`), ETag / Last-Modified fetch
+  cache (304 / unchanged-sha short-circuit), and robots.txt compliance
+  (TTL-cached; unreadable file = safe default disallowed; exception only
+  via approved `permission_change` decision).
+- [x] **Scope documentation** — per-project, per-domain collection scopes
+  (methods / delay / cap / robots posture / note) read by the agent before
+  every fetch; visible and editable in the dashboard (Data & Access).
+- [x] Tests: `tests/test_access.py` (11) — suite total 49 passed.
 
 ## What is NOT claimed
 

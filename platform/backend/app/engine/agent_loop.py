@@ -30,8 +30,9 @@ from ..engine.ids import new_id
 from ..engine.knowledge import upsert_knowledge
 from ..engine.planner import heuristic_plan, llm_plan
 from ..engine.reports import REPORT_TYPES, render_report
-from ..models import (AgentRun, Decision, Evidence, Feature, Observation, PageRecord,
-                      Project, Report, ResearchTask, Subtask, UnresolvedQuestion)
+from ..models import (AgentRun, ApiConnector, CollectionScope, Decision, Evidence,
+                      Feature, Observation, PageRecord, Project, Report, ResearchTask,
+                      Subtask, UnresolvedQuestion)
 
 log = logging.getLogger("rice.agent")
 
@@ -159,10 +160,40 @@ async def _h_discover(task: ResearchTask, st: Subtask, ctx: dict) -> dict:
     return {"url_queue": urls[:50], "count": len(urls[:50])}
 
 
+class SubtaskSkip(Exception):
+    """Handler asks the loop to mark the subtask skipped (honest, explained)."""
+
+
+async def _scope_for(project_id: str, domain: str) -> dict | None:
+    """Per-domain collection scope, with the project's '*' default row as
+    fallback. Returns a plain dict (the ORM row is detached after the
+    session closes)."""
+    from ..models import CollectionScope
+
+    async with session_scope() as s:
+        rows = (await s.execute(
+            select(CollectionScope).where(CollectionScope.project_id == project_id)
+        )).scalars().all()
+    wildcard = next((r for r in rows if r.domain == "*"), None)
+    exact = next((r for r in rows if r.domain == domain), None)
+    r = exact or wildcard
+    if r is None:
+        return None
+    return {"id": r.id, "domain": r.domain, "allowed_methods": r.allowed_methods or [],
+            "min_delay_s": r.min_delay_s, "max_pages": r.max_pages,
+            "robots_mode": r.robots_mode, "note": r.note}
+
+
 async def _h_fetch(task: ResearchTask, st: Subtask, ctx: dict) -> dict:
     """One fetch subtask. The description carries the target URL (set by the
-    planner). Honours project permissions; failures are recorded and trigger
-    the manual-evidence path."""
+    planner). Enforces the per-domain collection scope (allowed methods,
+    politeness delay, page cap, robots.txt) and project permissions; a
+    restricted URL is gated to a human decision, never bypassed. Failures are
+    recorded and trigger the manual-evidence path."""
+    from urllib.parse import urlparse
+
+    from ..config import get_settings
+    from . import http_fetch, robots
     from .browser.manager import run_capture
 
     desc = st.description
@@ -171,31 +202,81 @@ async def _h_fetch(task: ResearchTask, st: Subtask, ctx: dict) -> dict:
         raise RuntimeError("fetch subtask has no URL in description/checkpoint")
     project = ctx["project"]
     perms = project.get("permissions") or {}
-    methods = perms.get("collection_methods") or ["browser"]
-    if "browser" not in methods:
-        st.requires_approval = True
-        raise PermissionGate("Collection method 'browser' is not enabled for this project (manual import only).")
-    result = await run_capture(
-        project_id=task.project_id,
-        source_url=url,
-        task_id=task.id,
-        max_retries=1,
-    )
-    if not result.get("ok"):
-        err = result.get("error", "capture failed")
-        low_err = err.lower()
-        if "binar" in low_err or "adapter" in low_err or "playwright install" in low_err:
-            # environmental: everything will fail the same way → surface as a
-            # decision to switch to manual evidence instead of burning retries.
-            st.requires_approval = True
+    settings = get_settings()
+
+    domain = urlparse(url).netloc
+    scope = await _scope_for(task.project_id, domain)
+    if scope is not None:
+        # an explicit scope row wins; an empty method list means manual-only
+        methods = scope.get("allowed_methods") or ["manual"]
+    else:
+        methods = perms.get("collection_methods") or ["browser"]
+
+    # --- page cap: honest, explained skip (not a silent drop) ---
+    max_pages = int((scope or {}).get("max_pages") or settings.max_pages_per_session)
+    async with session_scope() as s:
+        siblings = (await s.execute(
+            select(Subtask).where(Subtask.task_id == task.id, Subtask.type == "fetch")
+        )).scalars().all()
+    done = sum(1 for sib in siblings if sib.idx < st.idx and sib.status == "complete")
+    if done >= max_pages:
+        raise SubtaskSkip(
+            f"collection page cap reached for {domain or '(no domain)'} (scope max_pages={max_pages}); "
+            "this URL was not fetched — extend the scope with an approved decision if it is required"
+        )
+
+    # --- robots.txt: respected unless a human approved an exception ---
+    if scope and scope.get("robots_mode") == "approved_exception":
+        pass  # sign-off recorded on the scope row
+    else:
+        status, detail = await robots.robots_status(url)
+        if status == "disallowed":
             raise PermissionGate(
-                f"Browser capture unavailable ({err}). The target also requires no automated "
-                "capture in this environment. Approve manual evidence import to continue, or "
-                "install browser binaries on the host."
+                f"robots.txt for {domain} disallows automated fetch of this URL ({detail}). "
+                "Sanctioned paths: import the evidence manually, or have the researcher approve a "
+                "robots exception for this domain's collection scope."
             )
-        raise RuntimeError(f"Capture failed for {url}: {err}")
-    st.checkpoint["page_id"] = result.get("page_id", "")
-    return result
+
+    # --- politeness delay (per scope or platform default) ---
+    delay = float((scope or {}).get("min_delay_s") or settings.default_delay_between_fetches_s)
+
+    # --- method dispatch: http (polite GET + ETag cache) then browser ---
+    if "http" in methods:
+        res = await http_fetch.fetch_page(task.project_id, url, delay_s=delay)
+        if res.get("ok"):
+            st.checkpoint["page_id"] = res.get("page_id", "")
+            return {**res, "method": "http"}
+        if "browser" in methods:
+            log.info("HTTP capture failed for %s (%s) — falling back to browser",
+                     url, (res.get("error") or "")[:160])
+        else:
+            raise RuntimeError(f"HTTP capture failed for {url}: {res.get('error')} (browser not in scope)")
+    if "browser" in methods:
+        if "http" not in methods:
+            await asyncio.sleep(delay)  # politeness delay applies to browser too
+        result = await run_capture(
+            project_id=task.project_id,
+            source_url=url,
+            task_id=task.id,
+            max_retries=1,
+        )
+        if not result.get("ok"):
+            err = result.get("error", "capture failed")
+            low_err = err.lower()
+            if "binar" in low_err or "adapter" in low_err or "playwright install" in low_err:
+                # environmental: everything will fail the same way → surface as a
+                # decision to switch to manual evidence instead of burning retries.
+                raise PermissionGate(
+                    f"Browser capture unavailable ({err}). Approve manual evidence import to "
+                    "continue, or install browser binaries on the host."
+                )
+            raise RuntimeError(f"Capture failed for {url}: {err}")
+        st.checkpoint["page_id"] = result.get("page_id", "")
+        return {**result, "method": "browser"}
+    raise PermissionGate(
+        f"No automated collection method is allowed for {domain or url} (scope methods: "
+        f"{', '.join(methods) or 'none'}). Approve manual evidence import."
+    )
 
 
 def _extract_url(text: str) -> str:
@@ -511,6 +592,11 @@ async def execute_task(task_id: str) -> None:
                 await _set_subtask(st.id, requires_approval=True, last_error=str(pg))
                 _rlog(f"Subtask {st.idx} gated: {pg}")
                 continue  # next loop iteration creates the decision
+            except SubtaskSkip as sk:
+                await _set_subtask(st.id, status="skipped", last_error=str(sk),
+                                   finished_at=datetime.now(timezone.utc))
+                _rlog(f"Subtask {st.idx} skipped: {sk}")
+                continue
             except asyncio.CancelledError:
                 await _set_subtask(st.id, status="queued", started_at=None)
                 await _set_task(task_id, status="paused")
@@ -599,6 +685,8 @@ def start_task(task_id: str) -> str:
 
 
 async def resume_after_decision(decision_id: str, approved: bool) -> None:
+    task_id = ""
+    ctx: dict = {}
     async with session_scope() as s:
         d = (await s.execute(select(Decision).where(Decision.id == decision_id))).scalars().first()
         if d is None:
@@ -606,7 +694,8 @@ async def resume_after_decision(decision_id: str, approved: bool) -> None:
         d.status = "approved" if approved else "rejected"
         d.decided_at = datetime.now(timezone.utc)
         task_id = d.task_id
-        st_id = (d.context or {}).get("subtask_id", "")
+        ctx = d.context or {}
+        st_id = ctx.get("subtask_id", "")
         if st_id:
             st = (await s.execute(select(Subtask).where(Subtask.id == st_id))).scalars().first()
             if st is not None:
@@ -618,5 +707,28 @@ async def resume_after_decision(decision_id: str, approved: bool) -> None:
                     st.status = "skipped"
                     st.decision_id = ""
                     st.last_error = "rejected by researcher"
+        await s.commit()
+
+    # non-task side effects of a human decision (their own sessions, so the
+    # decision commit above is already durable)
+    if approved and ctx.get("connector_id"):
+        async with session_scope() as s:
+            c = (await s.execute(
+                select(ApiConnector).where(ApiConnector.id == ctx["connector_id"])
+            )).scalars().first()
+            if c is not None and c.status == "pending_approval":
+                c.status = "active"
+                c.error = ""
+            await s.commit()
+    if approved and ctx.get("scope_id") and ctx.get("robots_exception"):
+        async with session_scope() as s:
+            sc = (await s.execute(
+                select(CollectionScope).where(CollectionScope.id == ctx["scope_id"])
+            )).scalars().first()
+            if sc is not None:
+                sc.robots_mode = "approved_exception"
+                sc.note = (sc.note + " | " if sc.note else "") + "robots exception approved by researcher"
+            await s.commit()
+
     if approved and task_id:
         start_task(task_id)

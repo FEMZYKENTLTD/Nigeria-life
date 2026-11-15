@@ -1,5 +1,7 @@
 // Evidence Bridge — side panel logic.
 // Manual-evidence path: the human looks at a page, then explicitly posts it.
+// No background capture, ever: page reads and screenshots happen only inside
+// this click handler, gated on the activeTab grant from the toolbar action.
 const $ = (id) => document.getElementById(id);
 const DEFAULT_API = "http://localhost:8787";
 
@@ -50,26 +52,34 @@ async function refreshTabPreview() {
   }
 }
 
+async function activeTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !tab.url || !/^https?:/.test(tab.url)) {
+    throw new Error("the current tab is not an http(s) page");
+  }
+  return tab;
+}
+
 async function capturePage() {
   const base = await apiBase();
   const projectId = $("project").value;
   if (!projectId) return log("select a project first");
+  let tab;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.url || !/^https?:/.test(tab.url)) {
-      return log("the current tab is not an http(s) page");
-    }
+    tab = await activeTab();
+  } catch (e) {
+    return log(e.message);
+  }
+  try {
     const body = {
       url: tab.url,
-      title: tab.title || "",
+      title: $("title").value || tab.title || "",
+      notes: $("notes").value,
       status: "documented",
       evidence_class: "C",
       evidence_source: "manual-evidence bridge (side panel)",
     };
     if ($("withHtml").checked) {
-      // Read the rendered DOM of the active tab. Gated on `activeTab`:
-      // the user must have opened the panel from the toolbar action (an
-      // explicit human act) — no background page reading, ever.
       try {
         const res = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -77,16 +87,27 @@ async function capturePage() {
         });
         body.html = res && res[0] ? res[0].result : "";
       } catch (e) {
-        log(`HTML capture blocked (${e.message}). Click the toolbar icon to open the panel, then capture again — or tick "title/URL only".`);
+        log(`HTML capture blocked (${e.message}). Click the toolbar icon to open the panel, then capture again.`);
       }
     }
-    const r = await fetch(base + `/api/projects/${projectId}/pages/import`, {
+    if ($("withShot").checked) {
+      try {
+        const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: "png" });
+        body.screenshot_b64 = dataUrl;
+      } catch (e) {
+        log(`screenshot blocked (${e.message}) — continuing without it`);
+      }
+    }
+    const r = await fetch(base + `/api/projects/${projectId}/manual-captures`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
-    log(`captured ${tab.url} into project ${projectId}`);
+    const out = await r.json();
+    log(`captured ${tab.url} (page ${out.page_id.slice(0, 10)}…, evidence ${out.evidence_id.slice(0, 10)}…)`);
+    $("notes").value = "";
+    $("title").value = "";
   } catch (e) {
     log(`capture failed: ${e.message}`);
   }
@@ -98,7 +119,7 @@ async function postObservation() {
   const text = $("obsText").value.trim();
   if (!projectId || !text) return log("select a project and describe the observation");
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await activeTab().catch(() => null);
     const r = await fetch(base + `/api/projects/${projectId}/observations`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

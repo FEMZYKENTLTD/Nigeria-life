@@ -135,6 +135,44 @@ export interface Report {
   chars?: number;
 }
 
+export interface ScopeRow {
+  id: string;
+  domain: string;
+  allowed_methods: string[];
+  min_delay_s: number;
+  max_pages: number;
+  robots_mode: string;
+  note: string;
+}
+
+export interface Connector {
+  id: string;
+  name: string;
+  base_url: string;
+  auth_type: string;
+  env_var: string;
+  key_header: string;
+  endpoints: { name: string; path: string; method: string }[];
+  status: string;
+  last_sync_at: string;
+  last_sync: { rows?: number; observations?: number; at?: string; endpoints?: { name: string; rows: number }[] };
+  error: string;
+}
+
+export interface DataAsset {
+  id: string;
+  name: string;
+  filename: string;
+  format: string;
+  provenance: string;
+  license: string;
+  rows: number;
+  evidence_id: string;
+  status: string;
+  error: string;
+  imported_at: string;
+}
+
 export const api = {
   health: () => req<{ status: string; ai_provider: string; db: string }>("/api/health"),
   overview: () => req<Overview>("/api/overview"),
@@ -215,6 +253,43 @@ export const api = {
     req<{ level: string; event: string; message: string; ts: string; engine: string }[]>(
       `/api/sessions/${id}/log`
     ),
+
+  // ---- data & access (sanctioned collection) ----
+  scope: (pid: string) => req<ScopeRow[]>(`/api/projects/${pid}/scope`),
+  upsertScope: (pid: string, body: Partial<ScopeRow> & { robots_mode?: string }) =>
+    post<{ scope: ScopeRow; robots_exception_pending: boolean; created: boolean }>(
+      `/api/projects/${pid}/scope`, body),
+  connectors: (pid: string) => req<Connector[]>(`/api/projects/${pid}/connectors`),
+  createConnector: (pid: string, body: {
+    name: string; base_url: string; auth_type: string; env_var: string;
+    key_header: string; endpoints: { name: string; path: string; method: string }[];
+  }) => post<{ connector: Connector; decision_id: string }>(`/api/projects/${pid}/connectors`, body),
+  syncConnector: (pid: string, cid: string) =>
+    post<{ ok: boolean; rows: number; observations: number }>(
+      `/api/projects/${pid}/connectors/${cid}/sync`),
+  dataAssets: (pid: string) => req<DataAsset[]>(`/api/projects/${pid}/data-assets`),
+  importDataAsset: (pid: string, file: File, meta: { name: string; provenance: string; license: string; evidence_class: string }) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", meta.name);
+    fd.append("provenance", meta.provenance);
+    fd.append("license", meta.license);
+    fd.append("evidence_class", meta.evidence_class);
+    return fetch(`/api/projects/${pid}/data-assets/import`, { method: "POST", body: fd })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+        return r.json();
+      });
+  },
+  manualCapture: (pid: string, body: { url: string; title: string; notes: string; html: string; screenshot_b64: string }) =>
+    post<{ page_id: string; evidence_id: string }>(`/api/projects/${pid}/manual-captures`, body),
+  manualQueue: (pid: string) => req<{
+    pending_decisions: { id: string; task_id: string; question: string; created_at: string }[];
+    blocked_fetches: { id: string; task_id: string; description: string; status: string; last_error: string }[];
+  }>(`/api/projects/${pid}/manual-queue`),
+  robotsCheck: (pid: string, url: string) =>
+    req<{ url: string; status: string; detail: string }>(
+      `/api/projects/${pid}/robots-check?url=${encodeURIComponent(url)}`),
 
   githubStatus: () =>
     req<{
