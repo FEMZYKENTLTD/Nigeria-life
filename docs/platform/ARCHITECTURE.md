@@ -27,7 +27,7 @@ Design principles, enforced in code:
 | Evidence integrity — every finding has ID, page ref, evidence ref, class (C/S/I/H/U), confidence, status | `models.py` (NOT NULL FK chains), `evidence_import.py`, `knowledge.py` |
 | Honest failure — nothing is marked complete that is only a mockup; failures persist with reasons | `agent_loop.py` (loud failure paths, `_incomplete_summary`), analytics (no fake coverage) |
 | No arbitrary percentages — every score ships its formula and inputs | `analytics.py` — each metric returns `score`, `components`, `explanation` |
-| Strict permissions — no stealth, no evasion, no credential storage; manual import is the sanctioned restricted path | `systems.py` source approval, `agent_loop.py` `PermissionGate` + human `Decision` rows |
+| Strict permissions — declared, permission-gated collection; no credential storage; manual import is the sanctioned restricted path | `systems.py` source approval, `agent_loop.py` `PermissionGate` + human `Decision` rows |
 | Local-first — works fully offline; cloud AI is an optional adapter | `ai/registry.py`, `ai/offline.py` (deterministic heuristics are the default) |
 | Multi-project isolation — projects own tasks, evidence, sessions, reports; core is shared | every table carries `project_id`; queries are scoped |
 
@@ -277,7 +277,7 @@ history so superseded entries remain auditable. **Works fully offline.**
 
 ### 6.7 Data & Access engines (sanctioned collection)
 
-**`robots.py` — robots.txt compliance (politeness, not evasion).** Each
+**`robots.py` — robots.txt compliance (politeness).** Each
 domain's robots.txt is fetched once per hour and applied with a declared
 User-Agent: readable file → followed; 404 → nothing disallowed; 401/400/403
 (unreadable) → safe default *disallowed*; network error → `unknown`
@@ -288,7 +288,7 @@ disallowed URL raises a PermissionGate (manual-evidence decision) — never a
 bypass.
 
 **`politeness.py` + `http_fetch.py` — polite HTTP capture.** A plain `httpx`
-GET (declared UA, no header spoofing, no stealth) with per-scope delay and
+GET (declared UA, no header spoofing) with per-scope delay and
 ETag / Last-Modified conditional re-requests: 304 or unchanged content-sha is
 a cache hit (`fetch_cache`) and the page is not re-processed. No rendering —
 JS-only content falls through to the browser path or the manual gate.

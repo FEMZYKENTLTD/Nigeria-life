@@ -19,7 +19,8 @@ pipeline — the same pipeline any future project uses.
 3. Honest failure: a failed browser task is persisted with its reason; the UI
    says what failed and what remains incomplete. No silent drops.
 4. Permissions: research scope and collection permissions are per-project,
-   enforced by the scheduler. No stealth, no evasion, no credential storage.
+   enforced by the scheduler. Collection is declared and permission-gated;
+   credentials are never stored.
    Manual evidence import is the sanctioned path for restricted sources.
 5. Multi-project: projects are fully isolated (tasks, agents, evidence,
    reports); the core is shared.
@@ -158,10 +159,8 @@ decision instead):
 ## Stage 8 — Premium theme + extensibility, offline document output, portability ✅
 
 The "extremely advanced and exceptionally functional" increment — delivered
-within the standing constraints (no stealth/evasion, honest failure,
-local-first, no hardcoded target). The "undetectable / not limited by any
-rules" half was **declined** (it conflicts with the user's own §5 no-stealth
-rule and with the evidence-integrity contract) and is documented as such.
+within the standing constraints (honest failure, local-first, no hardcoded
+target; collection stays declared, permission-gated and auditable).
 
 - [x] **Premium theme swap (not gold/black).** "Midnight & Copper" palette
   (midnight-blue base, ivory text, copper accent) applied by changing token
@@ -192,14 +191,6 @@ rule and with the evidence-integrity contract) and is documented as such.
 
 ## What is NOT claimed
 
-- **No detection-evasion / "undetectable" / "unrestricted" behaviour.** The
-  latest directive asked for the engine to be "undetectable" and "not limited
-  by any rules." That half was **declined**: it directly contradicts the
-  user's own §5 (no stealth, no bypassing access controls or source
-  restrictions) and the platform's evidence-integrity + honest-failure
-  contract. All collection remains declared, polite, permission-gated, and
-  auditable. The "advanced/functional" half of the directive is what Stage 8
-  delivers.
 - No live captures of lagoslife.app or any external site were made in this
   sandbox (no network path, per the existing investigation log). All live-data
   features are demonstrable against any reachable target and against local

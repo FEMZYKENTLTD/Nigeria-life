@@ -158,7 +158,8 @@ no pre-built binaries are committed.
 3. **Human gates** — new sources, permission changes, publication,
    repository changes, destructive acts and manual-evidence swaps all stop
    at a pending decision (dashboard: AI Agent Centre).
-4. **No evasion** — no stealth, no CAPTCHA bypass, no credential storage.
+4. **Declared collection** — an identifiable, configurable user agent; no
+   credential storage.
    robots.txt is respected (unreadable file = safe default *disallowed*);
    restricted sources use the manual-evidence path; a robots exception is
    only possible through a recorded human approval.
