@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Evidence Bridge</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Evidence Bridge</h1>
+    <p class="sub">Manual-evidence path for sources that disallow automation.</p>
+  </header>
+
+  <section>
+    <label for="api">Platform API</label>
+    <input id="api" type="text" placeholder="http://localhost:8787" />
+  </section>
+
+  <section>
+    <label for="project">Project</label>
+    <select id="project"><option value="">loading…</option></select>
+  </section>
+
+  <section class="capture-preview">
+    <div class="card-title">Current tab</div>
+    <div id="tab" class="tab-preview">—</div>
+  </section>
+
+  <section>
+    <div class="card-title">Capture details (optional)</div>
+    <input id="title" type="text" placeholder="Title override" />
+    <textarea id="notes" rows="2" placeholder="Notes — what does this page show?"></textarea>
+    <label class="chk">
+      <input id="withHtml" type="checkbox" checked />
+      Include rendered HTML (analysed by the page understanding engine)
+    </label>
+    <label class="chk">
+      <input id="withShot" type="checkbox" checked />
+      Include a screenshot of the visible tab
+    </label>
+  </section>
+
+  <button id="capture" class="primary">Capture page into project</button>
+  <button id="addObs" class="secondary">Add an observation instead</button>
+
+  <div id="obsWrap" class="hidden">
+    <label for="obsKind">Kind</label>
+    <select id="obsKind">
+      <option>note</option>
+      <option>fact</option>
+      <option>limitation</option>
+      <option>opportunity</option>
+      <option>contradiction</option>
+    </select>
+    <label for="obsText">Observation</label>
+    <textarea id="obsText" rows="3" placeholder="What did you see on this page?"></textarea>
+    <label for="obsConf">Confidence (0–1)</label>
+    <input id="obsConf" type="number" min="0" max="1" step="0.05" value="0.8" />
+    <button id="obsSend" class="primary small">Post observation</button>
+  </div>
+
+  <pre id="log" class="log"></pre>
+
+  <footer>
+    The human is the collector: this bridge only ever sends what a person
+    looked at, on explicit click. No background scraping, no hidden requests,
+    no restriction bypass.
+  </footer>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

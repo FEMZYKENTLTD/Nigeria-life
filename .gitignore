@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node / frontend build artifacts
+node_modules/
+platform/frontend/dist/
+.vite/
+
+# Local-first runtime data (SQLite DB, evidence files, screenshots, report
+# exports). Per-installation state — never part of the source tree.
+platform/data/
+platform/backend/data/
+
+# Environment
+.env
+.env.*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+
+# TS build info
+*.tsbuildinfo

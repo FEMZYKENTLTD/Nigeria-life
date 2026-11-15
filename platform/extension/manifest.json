@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Nigeria Life Intelligence Engine — Evidence Bridge",
+  "version": "1.0.0",
+  "description": "Manual-evidence bridge: captures the current page (URL, title, rendered HTML) and posts it into the Intelligence Engine API as confirmed evidence. No automated capture of restricted sites — the human is the collector.",
+  "permissions": ["sidePanel", "activeTab", "tabs", "storage", "scripting"],
+  "host_permissions": ["http://localhost:8787/*", "http://127.0.0.1:8787/*"],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open the Intelligence Engine evidence bridge"
+  }
+}
