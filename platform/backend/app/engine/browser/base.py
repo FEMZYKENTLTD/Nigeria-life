@@ -18,6 +18,8 @@ class CaptureOptions:
     wait_ms: int = 3000
     timeout_ms: int = 30000
     user_agent: str = ""
+    # domcontentloaded | load | networkidle
+    wait_until: str = "domcontentloaded"
 
 
 @dataclass
@@ -27,6 +29,7 @@ class CaptureResult:
     status_code: int | None = None
     html: str = ""
     screenshot_paths: list[str] = field(default_factory=list)
+    screenshot_sizes: dict[str, int] = field(default_factory=dict)  # path → bytes on disk
     console_errors: list[str] = field(default_factory=list)
     navigations: list[str] = field(default_factory=list)
     error: str = ""
@@ -51,6 +54,15 @@ class BrowserEngineAdapter(abc.ABC):
         Implementations must never store passwords/cookies/tokens in the
         returned result — only public observable state.
         """
+
+    async def inspect_page(self, url: str, screenshot_path: str = "",
+                           timeout_ms: int = 30000,
+                           wait_until: str = "domcontentloaded") -> dict:
+        """Standalone quick probe (no session, no analysis). Always returns a
+        dict — never raises: {"url", "status", "title", "screenshot_size",
+        "error"}. On a target failure the dict carries the honest error; a
+        500 is reserved for the engine itself being unable to run."""
+        raise NotImplementedError
 
     async def close(self) -> None:  # pragma: no cover - trivial
         pass

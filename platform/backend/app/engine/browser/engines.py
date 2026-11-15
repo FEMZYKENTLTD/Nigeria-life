@@ -23,7 +23,25 @@ log = logging.getLogger("rice.browser")
 
 SUPPORTED_ENGINES = ("chromium", "firefox", "webkit")
 
+# Fallback only; the declared identity is RICE_BROWSER_UA in settings.
 UA_SUFFIX = "NigeriaLifeResearchBot/1.0 (+research-platform; authorised-research-only)"
+
+WAIT_UNTIL_CHOICES = ("domcontentloaded", "load", "networkidle")
+
+
+def _default_ua() -> str:
+    """The declared, identifiable user agent — configurable per deployment
+    via RICE_BROWSER_UA, always honest (never impersonates a real browser)."""
+    try:
+        from ...config import get_settings
+
+        return get_settings().browser_ua or UA_SUFFIX
+    except Exception:
+        return UA_SUFFIX
+
+
+def _norm_wait_until(wait_until: str) -> str:
+    return wait_until if wait_until in WAIT_UNTIL_CHOICES else "domcontentloaded"
 
 
 class PlaywrightAdapter(BrowserEngineAdapter):
@@ -72,12 +90,14 @@ class PlaywrightAdapter(BrowserEngineAdapter):
         result = CaptureResult(ok=False)
         pw = None
         context = None
+        browser = None
         try:
             from playwright.async_api import async_playwright
 
             pw = await async_playwright().start()
             launcher = getattr(pw, self.engine)
-            ua = options.user_agent or f"{UA_SUFFIX}"
+            ua = options.user_agent or _default_ua()
+            wait_until = _norm_wait_until(options.wait_until)
             common = {
                 "headless": headless,
                 "viewport": {"width": int(options.viewport.get("width", 1440)),
@@ -111,7 +131,8 @@ class PlaywrightAdapter(BrowserEngineAdapter):
             page.on("framenavigated", _on_nav)
             page.on("console", _on_console)
 
-            response = await page.goto(options.url, timeout=options.timeout_ms, wait_until="domcontentloaded")
+            response = await page.goto(options.url, timeout=options.timeout_ms,
+                                       wait_until=wait_until)
             await page.wait_for_timeout(options.wait_ms)
             result.final_url = page.url
             result.status_code = response.status if response is not None else None
@@ -128,12 +149,14 @@ class PlaywrightAdapter(BrowserEngineAdapter):
                 try:
                     await page.screenshot(path=vp_path, full_page=False)
                     result.screenshot_paths.append(vp_path)
+                    result.screenshot_sizes[vp_path] = os.path.getsize(vp_path)
                 except Exception as e:
                     result.console_errors.append(f"screenshot(viewport) failed: {str(e)[:160]}")
                 if options.full_page_screenshot:
                     try:
                         await page.screenshot(path=fp_path, full_page=True)
                         result.screenshot_paths.append(fp_path)
+                        result.screenshot_sizes[fp_path] = os.path.getsize(fp_path)
                     except Exception as e:
                         result.console_errors.append(f"screenshot(fullpage) failed: {str(e)[:160]}")
                 for ev in (extra_viewports or [])[:6]:
@@ -141,11 +164,13 @@ class PlaywrightAdapter(BrowserEngineAdapter):
                     try:
                         await page.set_viewport_size({"width": int(ev.get("width", 375)),
                                                       "height": int(ev.get("height", 812))})
-                        await page.goto(options.url, timeout=options.timeout_ms, wait_until="domcontentloaded")
+                        await page.goto(options.url, timeout=options.timeout_ms,
+                                        wait_until=wait_until)
                         await page.wait_for_timeout(min(options.wait_ms, 1500))
                         p = os.path.join(screenshot_dir, f"responsive-{name}-{safe}.png")
                         await page.screenshot(path=p, full_page=False)
                         result.screenshot_paths.append(p)
+                        result.screenshot_sizes[p] = os.path.getsize(p)
                     except Exception as e:
                         result.console_errors.append(f"screenshot({name}) failed: {str(e)[:160]}")
             return result
@@ -170,11 +195,66 @@ class PlaywrightAdapter(BrowserEngineAdapter):
             except Exception:
                 pass
             try:
+                if browser is not None:
+                    await browser.close()
+            except Exception:
+                pass
+            try:
                 if pw is not None:
                     await pw.stop()
             except Exception:
                 pass
             result.duration_ms = int((time.monotonic() - t0) * 1000)
+
+    async def inspect_page(self, url: str, screenshot_path: str = "",
+                           timeout_ms: int = 30000,
+                           wait_until: str = "domcontentloaded") -> dict:
+        """Quick standalone probe of one public page. Never raises: always
+        returns {"url", "status", "title", "screenshot_size", "error"} with
+        the honest outcome (a failed target lands in "error", not an
+        exception)."""
+        out: dict = {"url": url, "status": None, "title": "",
+                     "screenshot_size": 0, "error": ""}
+        pw = None
+        context = None
+        browser = None
+        try:
+            from playwright.async_api import async_playwright
+
+            pw = await async_playwright().start()
+            launcher = getattr(pw, self.engine)
+            browser = await launcher.launch(headless=True)
+            context = await browser.new_context(
+                viewport={"width": 1440, "height": 900},
+                user_agent=_default_ua(),
+            )
+            page = await context.new_page()
+            response = await page.goto(url, timeout=timeout_ms,
+                                       wait_until=_norm_wait_until(wait_until))
+            out["status"] = response.status if response is not None else None
+            out["title"] = (await page.title() or "")[:500]
+            if screenshot_path:
+                d = os.path.dirname(screenshot_path)
+                if d:
+                    os.makedirs(d, exist_ok=True)
+                await page.screenshot(path=screenshot_path, full_page=False)
+                out["screenshot_size"] = os.path.getsize(screenshot_path)
+            await page.close()
+        except Exception as e:
+            out["error"] = str(e).splitlines()[0][:300]
+        finally:
+            for closer in (context, browser):
+                try:
+                    if closer is not None:
+                        await closer.close()
+                except Exception:
+                    pass
+            try:
+                if pw is not None:
+                    await pw.stop()
+            except Exception:
+                pass
+        return out
 
 
 ENGINE_REGISTRY: dict[str, type[BrowserEngineAdapter]] = {

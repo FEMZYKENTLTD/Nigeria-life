@@ -2,10 +2,12 @@
 integration and the research-package import endpoint."""
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..config import get_settings
@@ -214,7 +216,7 @@ async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session),
         project_id=project_id, source_url=body.url, engine=body.engine,
         headless=body.headless, viewport=body.viewport,
         extra_viewports=body.extra_viewports, full_page=body.full_page,
-        profile_id=body.profile_id,
+        profile_id=body.profile_id, wait_until=body.wait_until,
     )
     async with session_scope() as s:
         s.add(ActivityLog(project_id=project_id, actor="system",
@@ -245,6 +247,38 @@ async def session_log(session_id: str, db=Depends(get_session),
         raise HTTPException(404, "session not found")
     await check_project_access(db, user, sess.project_id)
     return await browser_manager.session_log(session_id)
+
+
+# ---------------------------------------------------------------- standalone page probe
+class InspectIn(BaseModel):
+    url: str
+    engine: str = "chromium"
+    wait_until: str = "domcontentloaded"  # domcontentloaded | load | networkidle
+    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+    screenshot: bool = True
+
+
+@router.post("/browsers/inspect")
+async def browsers_inspect(body: InspectIn, db=Depends(get_session),
+                           user=Depends(get_current_user)):
+    """Quick standalone probe of one public URL: status, title, screenshot.
+    Target failures come back in the dict (honest); 500 is reserved for the
+    engine itself not being runnable (e.g. binaries not installed)."""
+    s = get_settings()
+    health = await browser_manager.get_health()
+    h = next((x for x in health if x.get("engine") == body.engine), None)
+    if h is not None and not h.get("installed"):
+        raise HTTPException(500, f"engine '{body.engine}' not installed: {h.get('error', 'no browser binaries')}")
+    shot_path = ""
+    if body.screenshot:
+        safe = hashlib.sha1(body.url.encode()).hexdigest()[:12]
+        shot_path = os.path.join(s.data_dir, "screenshots", "inspect", f"{body.engine}-{safe}.png")
+    result = await browser_manager.inspect_page(
+        body.engine, body.url, screenshot_path=shot_path,
+        timeout_ms=body.timeout_ms, wait_until=body.wait_until)
+    if result.get("screenshot_size"):
+        result["screenshot_file"] = "/data/" + os.path.relpath(shot_path, s.data_dir)
+    return result
 
 
 # ---------------------------------------------------------------- github

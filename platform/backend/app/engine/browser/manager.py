@@ -58,6 +58,23 @@ async def get_health() -> list[dict]:
              "checked_at": r.checked_at.isoformat() if r.checked_at else ""} for r in rows]
 
 
+async def inspect_page(engine: str, url: str, screenshot_path: str = "",
+                       timeout_ms: int = 30000,
+                       wait_until: str = "domcontentloaded") -> dict:
+    """Standalone page probe via one engine. Returns the adapter's honest
+    dict ({"url","status","title","screenshot_size","error"}), or an engine
+    error dict when the engine cannot run."""
+    from .engines import make_adapter
+
+    adapter = make_adapter(engine)
+    if adapter is None:
+        return {"url": url, "status": None, "title": "", "screenshot_size": 0,
+                "error": f"unknown engine '{engine}'"}
+    return await adapter.inspect_page(url, screenshot_path=screenshot_path,
+                                      timeout_ms=timeout_ms,
+                                      wait_until=wait_until)
+
+
 async def list_profiles() -> list[dict]:
     async with session_scope() as s:
         rows = (await s.execute(select(BrowserProfile))).scalars().all()
@@ -189,7 +206,8 @@ async def run_capture(project_id: str, source_url: str, engine: str = "chromium"
                       extra_viewports: list[dict] | None = None,
                       full_page: bool = True, profile_id: str = "",
                       task_id: str = "", session_id: str = "",
-                      delay_s: float = 1.0, max_retries: int = 1) -> dict:
+                      delay_s: float = 1.0, max_retries: int = 1,
+                      wait_until: str = "domcontentloaded") -> dict:
     """Capture one page through a browser engine, persist a PageRecord +
     screenshots + execution logs. Returns a status dict (never raises for
     expected failures)."""
@@ -246,6 +264,7 @@ async def run_capture(project_id: str, source_url: str, engine: str = "chromium"
         viewport=viewport or {"width": 1440, "height": 900, "dpr": 1},
         full_page_screenshot=full_page,
         timeout_ms=s.browser_timeout_ms,
+        wait_until=wait_until,
     )
     result = None
     for attempt in range(1, max(1, max_retries) + 1):
@@ -351,7 +370,8 @@ async def run_capture(project_id: str, source_url: str, engine: str = "chromium"
                     captured_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
                 )
                 shot_records.append({"id": shot.id, "file": shot.file_path, "category": category,
-                                     "hash": phash})
+                                     "hash": phash,
+                                     "size": result.screenshot_sizes.get(p, 0)})
                 sess.add(shot)
                 # link evidence to page
                 if page_id:
@@ -378,6 +398,7 @@ async def run_capture(project_id: str, source_url: str, engine: str = "chromium"
             "pages_visited": 1,
             "ok": bool(result.ok),
             "screenshots": len(result.screenshot_paths),
+            "screenshot_bytes": sum(result.screenshot_sizes.values()),
             "console_errors": len(result.console_errors),
             "recoverable": result.recoverable,
         }

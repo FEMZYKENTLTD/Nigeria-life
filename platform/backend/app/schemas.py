@@ -116,6 +116,7 @@ class CaptureIn(BaseModel):
     extra_viewports: list[dict] | None = None
     full_page: bool = True
     profile_id: str = ""
+    wait_until: str = "domcontentloaded"  # domcontentloaded | load | networkidle
 
 
 class ProfileIn(BaseModel):
