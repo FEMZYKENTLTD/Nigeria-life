@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, Report } from "../api";
 import { Card, ErrorNote, Spinner, timeAgo, useFetch } from "../components/ui";
 
-const FORMATS = ["md", "html", "json", "csv"] as const;
+const FORMATS = ["md", "html", "json", "csv", "pdf"] as const;
 
 export default function Reports({ pid }: { pid: string }) {
   const { data: reports, error, loading, reload } = useFetch(
@@ -111,7 +111,8 @@ export default function Reports({ pid }: { pid: string }) {
 }
 
 export function ReportViewer({ report, onClose }: { report: Report; onClose: () => void }) {
-  const isMd = report.format === "md" || report.format === "csv" || report.format === "json";
+  const isMd = ["md", "csv", "json"].includes(report.format);
+  const isPdf = report.format === "pdf" && report.content.startsWith("data:");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={onClose}>
       <div
@@ -123,13 +124,30 @@ export function ReportViewer({ report, onClose }: { report: Report; onClose: () 
             <div className="text-sm font-medium text-white">{report.title}</div>
             <div className="text-[11px] text-faint">{report.format.toUpperCase()}</div>
           </div>
-          <button className="btn" onClick={onClose}>Close ✕</button>
+          <div className="flex gap-2">
+            {isPdf ? (
+              <a className="btn" href={report.content} download={report.title.replace(/\s+/g, "_") + ".pdf"}>
+                ⬇ Download PDF
+              </a>
+            ) : !isMd ? (
+              <a
+                className="btn"
+                href={URL.createObjectURL(new Blob([report.content], { type: "text/html" }))}
+                download={report.title.replace(/\s+/g, "_") + ".html"}
+              >
+                ⬇ Download
+              </a>
+            ) : null}
+            <button className="btn" onClick={onClose}>Close ✕</button>
+          </div>
         </div>
         <div className="overflow-auto p-5">
           {isMd ? (
             <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-muted">
               {report.content}
             </pre>
+          ) : isPdf ? (
+            <iframe title={report.title} src={report.content} className="h-[65vh] w-full rounded-lg border border-line bg-white" />
           ) : (
             <iframe
               title={report.title}

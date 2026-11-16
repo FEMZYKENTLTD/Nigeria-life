@@ -23,15 +23,13 @@ from ..models import (ActivityLog, ApiConnector, CollectionScope, DataAsset,
                       Screenshot, Subtask)
 from ..schemas import PageImportIn
 from .research import import_page
+from ..security.auth import check_project_access, get_current_user
 
 router = APIRouter(tags=["access"])
 
 
-async def _require_project(db, project_id: str) -> Project:
-    p = (await db.execute(select(Project).where(Project.id == project_id))).scalars().first()
-    if p is None:
-        raise HTTPException(404, "project not found")
-    return p
+async def _require_project(db, project_id: str, user: dict) -> Project:
+    return await check_project_access(db, user, project_id)
 
 
 # ---------------------------------------------------------------- collection scope
@@ -52,8 +50,8 @@ def _scope_dict(r: CollectionScope) -> dict:
 
 
 @router.get("/projects/{project_id}/scope")
-async def list_scope(project_id: str, db=Depends(get_session)):
-    await _require_project(db, project_id)
+async def list_scope(project_id: str, db=Depends(get_session), user=Depends(get_current_user)):
+    await _require_project(db, project_id, user)
     rows = (await db.execute(
         select(CollectionScope).where(CollectionScope.project_id == project_id)
     )).scalars().all()
@@ -61,8 +59,8 @@ async def list_scope(project_id: str, db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/scope", status_code=201)
-async def upsert_scope(project_id: str, body: ScopeIn, db=Depends(get_session)):
-    await _require_project(db, project_id)
+async def upsert_scope(project_id: str, body: ScopeIn, db=Depends(get_session), user=Depends(get_current_user)):
+    await _require_project(db, project_id, user)
     bad = [m for m in body.allowed_methods if m not in ("browser", "http", "manual", "api")]
     if bad:
         raise HTTPException(400, f"unknown methods: {bad}")
@@ -138,8 +136,8 @@ def _connector_dict(c: ApiConnector) -> dict:
 
 
 @router.get("/projects/{project_id}/connectors")
-async def list_connectors(project_id: str, db=Depends(get_session)):
-    await _require_project(db, project_id)
+async def list_connectors(project_id: str, db=Depends(get_session), user=Depends(get_current_user)):
+    await _require_project(db, project_id, user)
     rows = (await db.execute(
         select(ApiConnector).where(ApiConnector.project_id == project_id)
     )).scalars().all()
@@ -147,8 +145,8 @@ async def list_connectors(project_id: str, db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/connectors", status_code=201)
-async def create_connector(project_id: str, body: ConnectorIn, db=Depends(get_session)):
-    await _require_project(db, project_id)
+async def create_connector(project_id: str, body: ConnectorIn, db=Depends(get_session), user=Depends(get_current_user)):
+    await _require_project(db, project_id, user)
     eps = [e.model_dump() for e in body.endpoints]
     err = validate_connector(body.name, body.base_url, body.auth_type, body.env_var,
                              body.key_header, eps)
@@ -175,8 +173,8 @@ async def create_connector(project_id: str, body: ConnectorIn, db=Depends(get_se
 
 
 @router.post("/projects/{project_id}/connectors/{connector_id}/sync")
-async def connector_sync(project_id: str, connector_id: str, db=Depends(get_session)):
-    await _require_project(db, project_id)
+async def connector_sync(project_id: str, connector_id: str, db=Depends(get_session), user=Depends(get_current_user)):
+    await _require_project(db, project_id, user)
     c = (await db.execute(
         select(ApiConnector).where(
             ApiConnector.id == connector_id, ApiConnector.project_id == project_id)
@@ -192,8 +190,8 @@ async def connector_sync(project_id: str, connector_id: str, db=Depends(get_sess
 # ---------------------------------------------------------------- data assets
 
 @router.get("/projects/{project_id}/data-assets")
-async def list_data_assets(project_id: str, db=Depends(get_session)):
-    await _require_project(db, project_id)
+async def list_data_assets(project_id: str, db=Depends(get_session), user=Depends(get_current_user)):
+    await _require_project(db, project_id, user)
     rows = (await db.execute(
         select(DataAsset).where(DataAsset.project_id == project_id)
         .order_by(DataAsset.imported_at.desc())
@@ -214,8 +212,9 @@ async def import_data_asset(
     confidence: float = Form(0.6),
     file: UploadFile = File(...),
     db=Depends(get_session),
+    user=Depends(get_current_user),
 ):
-    await _require_project(db, project_id)
+    await _require_project(db, project_id, user)
     content = await file.read()
     if len(content) > data_import.MAX_FILE_BYTES:
         raise HTTPException(413, "file too large (max 25 MB)")
@@ -238,10 +237,10 @@ class ManualCaptureIn(BaseModel):
 
 
 @router.post("/projects/{project_id}/manual-captures", status_code=201)
-async def manual_capture(project_id: str, body: ManualCaptureIn, db=Depends(get_session)):
+async def manual_capture(project_id: str, body: ManualCaptureIn, db=Depends(get_session), user=Depends(get_current_user)):
     """Human-captured page (from the extension side panel or a paste-in).
     Recorded as confirmed manual evidence — the human did the collection."""
-    await _require_project(db, project_id)
+    await _require_project(db, project_id, user)
     if not body.url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must be http(s)")
     analysis = analyze_html(body.html, url=body.url, base_url=body.url) if body.html else None
@@ -331,9 +330,9 @@ async def manual_capture(project_id: str, body: ManualCaptureIn, db=Depends(get_
 # ---------------------------------------------------------------- manual queue & batch
 
 @router.post("/projects/{project_id}/pages/import-batch", status_code=201)
-async def import_pages_batch(project_id: str, body: list[PageImportIn], db=Depends(get_session)):
+async def import_pages_batch(project_id: str, body: list[PageImportIn], db=Depends(get_session), user=Depends(get_current_user)):
     """Batch manual import (e.g. pages exported from the researcher's browser)."""
-    await _require_project(db, project_id)
+    await _require_project(db, project_id, user)
     if not body:
         raise HTTPException(400, "empty batch")
     if len(body) > 100:
@@ -346,11 +345,11 @@ async def import_pages_batch(project_id: str, body: list[PageImportIn], db=Depen
 
 
 @router.get("/projects/{project_id}/manual-queue")
-async def manual_queue(project_id: str, db=Depends(get_session)):
+async def manual_queue(project_id: str, db=Depends(get_session), user=Depends(get_current_user)):
     """The 'restricted sources checklist': pending manual-evidence decisions +
     fetch subtasks that failed/skipped with a reason, so the researcher can see
     exactly what still needs human collection."""
-    await _require_project(db, project_id)
+    await _require_project(db, project_id, user)
     decisions = (await db.execute(
         select(Decision).where(
             Decision.project_id == project_id,
@@ -385,8 +384,8 @@ async def manual_queue(project_id: str, db=Depends(get_session)):
 # ---------------------------------------------------------------- robots (admin)
 
 @router.get("/projects/{project_id}/robots-check")
-async def robots_check(project_id: str, url: str, db=Depends(get_session)):
+async def robots_check(project_id: str, url: str, db=Depends(get_session), user=Depends(get_current_user)):
     """Read-only robots.txt posture for a URL — what the agent will do."""
-    await _require_project(db, project_id)
+    await _require_project(db, project_id, user)
     status, detail = await robots.robots_status(url)
     return {"url": url, "status": status, "detail": detail}

@@ -2,10 +2,12 @@
 integration and the research-package import endpoint."""
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..config import get_settings
@@ -23,6 +25,8 @@ from ..models import (ActivityLog, Evidence, Feature, GitHubState, Observation,
                       Source, UnresolvedQuestion)
 from ..db import session_scope
 from ..schemas import CaptureIn, GitHubWriteIn, ProfileIn, ReportGenIn, SearchIn
+from ..security.auth import (auth_enabled, check_project_access, get_current_user,
+                             is_admin, require_admin, require_project_access)
 
 router = APIRouter(tags=["systems"])
 
@@ -74,7 +78,8 @@ async def _ctx(project_id: str, db) -> dict:
 # ---------------------------------------------------------------- analytics
 
 @router.get("/projects/{project_id}/analytics")
-async def project_analytics(project_id: str, db=Depends(get_session)):
+async def project_analytics(project_id: str, db=Depends(get_session),
+                            _p=Depends(require_project_access)):
     ctx = await _ctx(project_id, db)
     return analytics.full_project_analytics(
         ctx["project"], ctx["pages"], ctx["features"],
@@ -90,7 +95,8 @@ async def report_types():
 
 
 @router.get("/projects/{project_id}/reports")
-async def list_reports(project_id: str, db=Depends(get_session)):
+async def list_reports(project_id: str, db=Depends(get_session),
+                       _p=Depends(require_project_access)):
     rows = (await db.execute(
         select(Report).where(Report.project_id == project_id)
         .order_by(Report.generated_at.desc())
@@ -101,11 +107,12 @@ async def list_reports(project_id: str, db=Depends(get_session)):
 
 
 @router.post("/projects/{project_id}/reports/generate")
-async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_session)):
+async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_session),
+                          _p=Depends(require_project_access)):
     if body.type not in REPORT_TYPES:
         raise HTTPException(400, f"unknown report type; options: {', '.join(REPORT_TYPES)}")
-    if body.format not in ("md", "json", "csv", "html"):
-        raise HTTPException(400, "format must be md|json|csv|html")
+    if body.format not in ("md", "json", "csv", "html", "pdf"):
+        raise HTTPException(400, "format must be md|json|csv|html|pdf")
     ctx = await _ctx(project_id, db)
     ctx["analytics"] = analytics.full_project_analytics(
         ctx["project"], ctx["pages"], ctx["features"],
@@ -123,35 +130,48 @@ async def generate_report(project_id: str, body: ReportGenIn, db=Depends(get_ses
     await db.flush()
     out_dir = os.path.join(s.data_dir, "reports", project_id)
     os.makedirs(out_dir, exist_ok=True)
-    ext = {"md": "md", "json": "json", "csv": "csv", "html": "html"}[body.format]
+    ext = {"md": "md", "json": "json", "csv": "csv", "html": "html", "pdf": "pdf"}[body.format]
     path = os.path.join(out_dir, f"{body.type}-{report.id}.{ext}")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+    if body.format == "pdf":
+        import base64
+
+        raw = base64.b64decode(content.split(",", 1)[1])
+        with open(path, "wb") as f:
+            f.write(raw)
+        # knowledge gets the markdown source of truth, never base64
+        kb_body = render_report(body.type, ctx, "md")[:12000]
+    else:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        kb_body = content[:12000]
     report.file_path = os.path.relpath(path, s.data_dir)
     db.add(ActivityLog(project_id=project_id, actor="system", action="report.generated",
                        subject=report.title))
     await db.commit()
-    await upsert_knowledge(project_id, "report", report.id, report.title, content[:12000])
+    await upsert_knowledge(project_id, "report", report.id, report.title, kb_body)
     return {"id": report.id, "title": report.title, "format": body.format, "chars": len(content)}
 
 
 @router.get("/reports/{report_id}")
-async def get_report(report_id: str, db=Depends(get_session)):
+async def get_report(report_id: str, db=Depends(get_session), user=Depends(get_current_user)):
     r = (await db.execute(select(Report).where(Report.id == report_id))).scalars().first()
     if not r:
         raise HTTPException(404, "report not found")
+    await check_project_access(db, user, r.project_id)
     return {c.name: getattr(r, c.name) for c in r.__table__.columns}
 
 
 # ---------------------------------------------------------------- knowledge base
 
 @router.post("/projects/{project_id}/knowledge/search")
-async def knowledge_search(project_id: str, body: SearchIn, db=Depends(get_session)):
+async def knowledge_search(project_id: str, body: SearchIn, db=Depends(get_session),
+                           _p=Depends(require_project_access)):
     return await kb_search(project_id, body.query, body.kinds, body.limit)
 
 
 @router.get("/knowledge/related")
-async def knowledge_related(kind: str, ref_id: str, project_id: str = "", db=Depends(get_session)):
+async def knowledge_related(kind: str, ref_id: str, project_id: str = "",
+                            db=Depends(get_session), user=Depends(get_current_user)):
     if not project_id:
         # resolve project from ref id kind
         if kind == "feature":
@@ -162,6 +182,7 @@ async def knowledge_related(kind: str, ref_id: str, project_id: str = "", db=Dep
             project_id = p.project_id if p else ""
     if not project_id:
         raise HTTPException(400, "project_id required")
+    await check_project_access(db, user, project_id)
     return await kb_related(project_id, kind, ref_id)
 
 
@@ -175,7 +196,9 @@ async def browsers_health(refresh: bool = False, db=Depends(get_session)):
 
 
 @router.post("/browsers/profiles", status_code=201)
-async def create_browser_profile(body: ProfileIn, db=Depends(get_session)):
+async def create_browser_profile(body: ProfileIn, db=Depends(get_session),
+                                 user=Depends(get_current_user)):
+    await check_project_access(db, user, body.project_id)
     return await browser_manager.create_profile(body.project_id, body.name, body.engine,
                                                 body.viewports, body.shared)
 
@@ -186,15 +209,14 @@ async def browser_profiles():
 
 
 @router.post("/projects/{project_id}/captures")
-async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session)):
-    p = (await db.execute(select(Project).where(Project.id == project_id))).scalars().first()
-    if p is None:
-        raise HTTPException(404, "project not found")
+async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session),
+                      user=Depends(get_current_user)):
+    await check_project_access(db, user, project_id)
     result = await browser_manager.run_capture(
         project_id=project_id, source_url=body.url, engine=body.engine,
         headless=body.headless, viewport=body.viewport,
         extra_viewports=body.extra_viewports, full_page=body.full_page,
-        profile_id=body.profile_id,
+        profile_id=body.profile_id, wait_until=body.wait_until,
     )
     async with session_scope() as s:
         s.add(ActivityLog(project_id=project_id, actor="system",
@@ -204,13 +226,59 @@ async def run_capture(project_id: str, body: CaptureIn, db=Depends(get_session))
 
 
 @router.get("/sessions")
-async def sessions(project_id: str = "", limit: int = 50, db=Depends(get_session)):
-    return await browser_manager.list_sessions(project_id or None, limit)
+async def sessions(project_id: str = "", limit: int = 50, db=Depends(get_session),
+                   user=Depends(get_current_user)):
+    if project_id:
+        await check_project_access(db, user, project_id)
+        return await browser_manager.list_sessions(project_id, limit)
+    pids = None
+    if auth_enabled() and not is_admin(user):
+        pids = list((await db.execute(
+            select(Project.id).where(Project.owner_id == user["id"]))).scalars().all()) or [""]
+    return await browser_manager.list_sessions(None, limit, project_ids=pids)
 
 
 @router.get("/sessions/{session_id}/log")
-async def session_log(session_id: str):
+async def session_log(session_id: str, db=Depends(get_session),
+                      user=Depends(get_current_user)):
+    sess = (await db.execute(
+        select(ResearchSession).where(ResearchSession.id == session_id))).scalars().first()
+    if sess is None:
+        raise HTTPException(404, "session not found")
+    await check_project_access(db, user, sess.project_id)
     return await browser_manager.session_log(session_id)
+
+
+# ---------------------------------------------------------------- standalone page probe
+class InspectIn(BaseModel):
+    url: str
+    engine: str = "chromium"
+    wait_until: str = "domcontentloaded"  # domcontentloaded | load | networkidle
+    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+    screenshot: bool = True
+
+
+@router.post("/browsers/inspect")
+async def browsers_inspect(body: InspectIn, db=Depends(get_session),
+                           user=Depends(get_current_user)):
+    """Quick standalone probe of one public URL: status, title, screenshot.
+    Target failures come back in the dict (honest); 500 is reserved for the
+    engine itself not being runnable (e.g. binaries not installed)."""
+    s = get_settings()
+    health = await browser_manager.get_health()
+    h = next((x for x in health if x.get("engine") == body.engine), None)
+    if h is not None and not h.get("installed"):
+        raise HTTPException(500, f"engine '{body.engine}' not installed: {h.get('error', 'no browser binaries')}")
+    shot_path = ""
+    if body.screenshot:
+        safe = hashlib.sha1(body.url.encode()).hexdigest()[:12]
+        shot_path = os.path.join(s.data_dir, "screenshots", "inspect", f"{body.engine}-{safe}.png")
+    result = await browser_manager.inspect_page(
+        body.engine, body.url, screenshot_path=shot_path,
+        timeout_ms=body.timeout_ms, wait_until=body.wait_until)
+    if result.get("screenshot_size"):
+        result["screenshot_file"] = "/data/" + os.path.relpath(shot_path, s.data_dir)
+    return result
 
 
 # ---------------------------------------------------------------- github
@@ -241,7 +309,9 @@ async def github_status(project_id: str = "", db=Depends(get_session)):
 
 
 @router.post("/github/sync")
-async def github_sync(project_id: str = "", db=Depends(get_session)):
+async def github_sync(project_id: str = "", db=Depends(get_session),
+                      user=Depends(get_current_user)):
+    require_admin(user)
     s = get_settings()
     adapter = get_adapter(local_path=s.local_repo_path or None, remote=s.github_repo or None)
     if adapter is None:
@@ -281,9 +351,12 @@ async def github_sync(project_id: str = "", db=Depends(get_session)):
 
 
 @router.post("/github/write-back")
-async def github_write(body: GitHubWriteIn, decision_id: str = "", db=Depends(get_session)):
+async def github_write(body: GitHubWriteIn, decision_id: str = "", db=Depends(get_session),
+                       user=Depends(get_current_user)):
     """Consequential repo change: allowed only after an approved Decision of
-    kind repo_change. Pass ?decision_id=<approved decision>."""
+    kind repo_change. Pass ?decision_id=<approved decision>. Admin-only in
+    multi-user mode (the central repo is shared)."""
+    require_admin(user)
     from ..models import Decision
     if not decision_id:
         raise HTTPException(400, "consequential repo change requires an approved decision: pass ?decision_id=<id>")
@@ -315,7 +388,8 @@ async def github_write(body: GitHubWriteIn, decision_id: str = "", db=Depends(ge
 # ---------------------------------------------------------------- import pipeline
 
 @router.post("/projects/{project_id}/import/research-package")
-async def import_package(project_id: str, docs_dir: str = "docs/research", db=Depends(get_session)):
+async def import_package(project_id: str, docs_dir: str = "docs/research",
+                         db=Depends(get_session), _p=Depends(require_project_access)):
     """Ingest a markdown research package directory into the project."""
     from ..engine.evidence_import import import_research_package
     s = get_settings()
@@ -327,3 +401,32 @@ async def import_package(project_id: str, docs_dir: str = "docs/research", db=De
     db.add(ActivityLog(project_id=project_id, actor="import", action="import.complete",
                        subject=docs_dir, detail=str(counts)))
     return {"imported": counts, "from": full}
+
+
+# ---------------------------------------------------------------- system: backup / plugins
+
+@router.post("/systems/backup")
+async def systems_backup(user=Depends(get_current_user)):
+    require_admin(user)
+    from ..engine.export_import import create_backup
+    r = await create_backup()
+    if not r.get("ok"):
+        raise HTTPException(503, r.get("error", "backup failed"))
+    return r
+
+
+@router.get("/systems/backups")
+async def systems_backups(user=Depends(get_current_user)):
+    require_admin(user)
+    from ..engine.export_import import list_backups
+    return list_backups()
+
+
+@router.get("/plugins")
+async def plugins_list():
+    from ..engine.plugins import KINDS, discover, registry
+
+    discover()
+    return {kind: [{"name": p.name, "source": p.meta.get("source", "unknown"),
+                    "description": p.meta.get("description", "")}
+                   for p in registry.list(kind)] for kind in KINDS}

@@ -42,6 +42,11 @@ npm run dev        # dev server :5173, proxies /api + /data -> :8787
 npm run build      # production bundle -> dist (served by the backend)
 ```
 
+Theme is "Midnight & Copper" (midnight-blue base, ivory text, copper accent —
+deliberately not gold/black). It lives entirely in the Tailwind token *values*
+(`tailwind.config.js`) plus a few CSS/template constants, so recolouring is a
+one-file change.
+
 ### 3. Seed the first project (optional demo)
 
 The existing `docs/research/` package is imported through the **generic**
@@ -56,7 +61,7 @@ pipeline — Lagos Life is data, not code:
 
 ```bash
 cd platform/backend
-.venv/bin/python -m pytest tests/ -q        # 38 passed
+.venv/bin/python -m pytest tests/ -q        # 57 passed
 ```
 
 ### 5. Data & Access (dashboard section)
@@ -78,7 +83,33 @@ Sanctioned collection controls, per project:
   automatically (pending decisions + blocked fetches with reasons), plus a
   capture form and a read-only robots.txt check.
 
-### 6. Browser captures (where available)
+### 6. Data & Ops (dashboard section)
+
+Platform operations, independent of the selected project:
+
+- **Backups** — "Create Backup" WAL-checkpoints and copies the database to
+  `platform/data/backups/` (keeps the last 20). The list shows each file,
+  size and timestamp. On a Postgres deployment the endpoint returns a clear
+  503 pointing at the documented `pg_dump` path instead of guessing.
+- **Plugin registry** — read-only view of the four extensible component
+  kinds (`ai_provider`, `browser_engine`, `report_format`,
+  `analysis_module`) with built-ins marked. External plugins install via the
+  `rice.plugins` setuptools entry-point group; a broken plugin is logged and
+  skipped, never fatal.
+- **Export / import a project** — export downloads a versioned JSON bundle
+  of one project (pages, features, evidence, findings, questions, sources,
+  scopes, assets, reports); evidence references are normalised so the bundle
+  is portable. Import recreates it as a **new, fully isolated** project with
+  fresh ids and remapped cross-references. Robots exceptions and approvals do
+  **not** travel — re-decide them locally.
+
+### 7. Reports: five formats
+
+Every one of the 14 report types renders to Markdown (source of truth),
+JSON, CSV, self-contained HTML and — new — **PDF** (a dependency-free
+multi-page A4 writer; view inline or download from the Reports viewer).
+
+### 8. Browser captures (where available)
 
 ```bash
 .venv/bin/python -m playwright install chromium   # and/or firefox, webkit
@@ -89,7 +120,7 @@ browser health service reports `installed=false` and the agent falls back to
 the manual-evidence path: it raises a `manual_evidence` decision that a
 human approves (import evidence) or rejects (capture skipped, gap stated).
 
-### 7. WebExtension evidence bridge
+### 9. WebExtension evidence bridge
 
 `chrome://extensions` → Developer mode → Load unpacked → select
 `platform/extension`. Open the side panel **from the toolbar icon** (that
@@ -98,7 +129,7 @@ add a title/notes, and capture the current page — rendered HTML + visible-tab
 screenshot included, posted as confirmed manual evidence. No background
 reading, no restriction bypass.
 
-### 8. Desktop (Tauri 2)
+### 10. Desktop (Tauri 2)
 
 See `platform/desktop/README.md` — scaffold + per-OS build instructions;
 no pre-built binaries are committed.
@@ -127,7 +158,8 @@ no pre-built binaries are committed.
 3. **Human gates** — new sources, permission changes, publication,
    repository changes, destructive acts and manual-evidence swaps all stop
    at a pending decision (dashboard: AI Agent Centre).
-4. **No evasion** — no stealth, no CAPTCHA bypass, no credential storage.
+4. **Declared collection** — an identifiable, configurable user agent; no
+   credential storage.
    robots.txt is respected (unreadable file = safe default *disallowed*);
    restricted sources use the manual-evidence path; a robots exception is
    only possible through a recorded human approval.

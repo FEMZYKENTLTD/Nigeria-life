@@ -538,21 +538,21 @@ def to_html(md: str, title: str) -> str:
 <title>{title}</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
-:root {{ --ink:#0a0a0b; --panel:#141419; --gold:#c9a227; --text:#e8e6df; --muted:#9a97a0; }}
+:root {{ --ink:#0d1322; --panel:#151e33; --gold:#c17d4f; --text:#ece7db; --muted:#97a3c0; }}
 body {{ background:var(--ink); color:var(--text); font:16px/1.6 ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif; margin:0; }}
 main {{ max-width:960px; margin:0 auto; padding:48px 24px 96px; }}
-h1,h2,h3 {{ color:var(--text); border-bottom:1px solid #26262e; padding-bottom:8px; }}
+h1,h2,h3 {{ color:var(--text); border-bottom:1px solid #283453; padding-bottom:8px; }}
 h1 {{ color:var(--gold); border:none; }}
 a {{ color:var(--gold); }}
 table {{ border-collapse:collapse; width:100%; margin:16px 0; font-size:14px; }}
-th,td {{ border:1px solid #26262e; padding:8px 10px; text-align:left; vertical-align:top; }}
+th,td {{ border:1px solid #283453; padding:8px 10px; text-align:left; vertical-align:top; }}
 th {{ background:var(--panel); color:var(--gold); }}
-tr:nth-child(even) td {{ background:#101014; }}
-code,pre {{ background:#101014; border:1px solid #26262e; border-radius:6px; padding:8px 10px; overflow-x:auto; }}
+tr:nth-child(even) td {{ background:#111a2e; }}
+code,pre {{ background:#111a2e; border:1px solid #283453; border-radius:6px; padding:8px 10px; overflow-x:auto; }}
 pre.mermaid {{ background:var(--panel); }}
-hr {{ border:none; border-top:1px solid #26262e; margin:32px 0; }}
+hr {{ border:none; border-top:1px solid #283453; margin:32px 0; }}
 em {{ color:var(--muted); }}
-@media print {{ body {{ background:#fff; color:#111; }} th,td,pre,code {{ border-color:#ccc; background:#fff; }} h1 {{ color:#8a6d1a; }} }}
+@media print {{ body {{ background:#fff; color:#111; }} th,td,pre,code {{ border-color:#ccc; background:#fff; }} h1 {{ color:#8f5f3d; }} }}
 </style></head>
 <body><main>{body}
 <script>if(window.mermaid){{mermaid.initialize({{startOnLoad:true,theme:'dark'}});}}</script>
@@ -571,4 +571,11 @@ def render_report(report_type: str, ctx: dict, fmt: str) -> str:
         return md
     if fmt == "html":
         return to_html(md, REPORT_TYPES[report_type])
+    if fmt == "pdf":
+        import base64
+
+        from . import pdf as _pdf
+        title = f"{REPORT_TYPES[report_type]} — {ctx.get('project', {}).get('name', '')}"
+        data = _pdf.render_pdf(title, md)
+        return "data:application/pdf;base64," + base64.b64encode(data).decode()
     raise ValueError(f"Unknown format: {fmt}")

@@ -1,10 +1,24 @@
 // Typed API client. All calls are relative URLs — same origin in production,
-// proxied in dev.
+// proxied in dev. Multi-user mode: a fresh Supabase access token is attached
+// to every call (null in local mode → backend acts as the local admin).
+import { getAccessToken } from "./auth";
+
+async function headers(opts?: RequestInit): Promise<Record<string, string>> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  Object.assign(h, (opts?.headers as Record<string, string>) || {});
+  const token = await getAccessToken();
+  if (token) h["Authorization"] = `Bearer ${token}`;
+  return h;
+}
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
-  const r = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const hadToken = Boolean(await getAccessToken());
+  const r = await fetch(path, { ...opts, headers: await headers(opts) });
+  if (r.status === 401 && hadToken) {
+    // session no longer valid → back to the sign-in screen
+    window.location.assign("/login");
+    throw new Error("not signed in");
+  }
   if (!r.ok) {
     let detail = r.statusText;
     try {
@@ -268,18 +282,21 @@ export const api = {
     post<{ ok: boolean; rows: number; observations: number }>(
       `/api/projects/${pid}/connectors/${cid}/sync`),
   dataAssets: (pid: string) => req<DataAsset[]>(`/api/projects/${pid}/data-assets`),
-  importDataAsset: (pid: string, file: File, meta: { name: string; provenance: string; license: string; evidence_class: string }) => {
+  importDataAsset: async (pid: string, file: File, meta: { name: string; provenance: string; license: string; evidence_class: string }) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("name", meta.name);
     fd.append("provenance", meta.provenance);
     fd.append("license", meta.license);
     fd.append("evidence_class", meta.evidence_class);
-    return fetch(`/api/projects/${pid}/data-assets/import`, { method: "POST", body: fd })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
-        return r.json();
-      });
+    return fetch(`/api/projects/${pid}/data-assets/import`, {
+      method: "POST",
+      body: fd,
+      headers: await headers(),
+    }).then(async (r) => {
+      if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+      return r.json();
+    });
   },
   manualCapture: (pid: string, body: { url: string; title: string; notes: string; html: string; screenshot_b64: string }) =>
     post<{ page_id: string; evidence_id: string }>(`/api/projects/${pid}/manual-captures`, body),
@@ -300,4 +317,38 @@ export const api = {
       docs_tree: { path: string; size: number }[];
     }>("/api/github/status"),
   githubSync: () => post<{ synced: boolean; docs: number; digest: string }>("/api/github/sync"),
+
+  // ---- multi-user: identity + admin views ----
+  me: () =>
+    req<{ id: string; email: string; display_name: string; role: string }>("/api/me"),
+  users: () =>
+    req<{ users: {
+      id: string; email: string; display_name: string; role: string;
+      created_at: string; last_seen_at: string;
+      counts: { projects: number; tasks: number; pages: number; evidence: number; observations: number; sessions: number };
+    }[]; total: number }>("/api/users"),
+  userDetail: (id: string) =>
+    req<{
+      user: { email: string; display_name: string; role: string; last_seen_at: string; counts: Record<string, number> };
+      projects: { id: string; name: string; status: string; created_at: string }[];
+      recent_tasks: { id: string; title: string; status: string; progress: number; result_summary: string; error: string; created_at: string }[];
+      recent_pages: { id: string; url: string; title: string; status: string; capture_method: string; browser_engine: string; error: string; observed_at: string }[];
+      recent_evidence: { id: string; ref_code: string; evidence_class: string; source_name: string; capture_method: string; description: string; created_at: string }[];
+      recent_activity: { project_id: string; actor: string; action: string; subject: string; detail: string; ts: string }[];
+    }>(`/api/users/${id}`),
+  setUserRole: (id: string, role: "admin" | "member") =>
+    patch<{ role: string }>(`/api/users/${id}/role`, { role }),
+
+  // ---- Data & Ops: backup, plugins, project portability
+  createBackup: () =>
+    post<{ ok: boolean; path: string; bytes: number; kept: number }>("/api/systems/backup"),
+  listBackups: () =>
+    req<{ name: string; path: string; bytes: number; modified: string }[]>("/api/systems/backups"),
+  plugins: () =>
+    req<Record<string, { name: string; source: string; description: string }[]>>("/api/plugins"),
+  exportProject: (pid: string) =>
+    req<Record<string, unknown>>(`/api/projects/${pid}/export`),
+  importProject: (bundle: Record<string, unknown>, name = "") =>
+    post<{ ok: boolean; project_id: string; counts: Record<string, number> }>(
+      `/api/projects/import?name=${encodeURIComponent(name)}`, bundle),
 };

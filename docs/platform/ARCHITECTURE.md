@@ -27,7 +27,7 @@ Design principles, enforced in code:
 | Evidence integrity — every finding has ID, page ref, evidence ref, class (C/S/I/H/U), confidence, status | `models.py` (NOT NULL FK chains), `evidence_import.py`, `knowledge.py` |
 | Honest failure — nothing is marked complete that is only a mockup; failures persist with reasons | `agent_loop.py` (loud failure paths, `_incomplete_summary`), analytics (no fake coverage) |
 | No arbitrary percentages — every score ships its formula and inputs | `analytics.py` — each metric returns `score`, `components`, `explanation` |
-| Strict permissions — no stealth, no evasion, no credential storage; manual import is the sanctioned restricted path | `systems.py` source approval, `agent_loop.py` `PermissionGate` + human `Decision` rows |
+| Strict permissions — declared, permission-gated collection; no credential storage; manual import is the sanctioned restricted path | `systems.py` source approval, `agent_loop.py` `PermissionGate` + human `Decision` rows |
 | Local-first — works fully offline; cloud AI is an optional adapter | `ai/registry.py`, `ai/offline.py` (deterministic heuristics are the default) |
 | Multi-project isolation — projects own tasks, evidence, sessions, reports; core is shared | every table carries `project_id`; queries are scoped |
 
@@ -99,7 +99,7 @@ platform/
 │       ├── App.tsx            # shell: sidebar nav, project selector
 │       ├── api.ts             # typed client (relative URLs only)
 │       ├── components/ui.tsx  # cards, KPIs, status pills, data hooks
-│       └── pages/             # 8 dashboard sections
+│       └── pages/             # 10 dashboard sections
 ├── scripts/
 │   ├── seed_lagos_life.py     # imports docs/research as project #1
 │   └── demo_run.py            # full pipeline demonstration
@@ -263,9 +263,10 @@ technical architecture, data model, business model, competitive matrix, gap
 analysis, PRD, roadmap, evidence register, completion report, interaction
 records. Formats: **Markdown (source of truth), JSON, CSV** (evidence /
 feature / page tables), **self-contained HTML** (inline CSS + Mermaid CDN for
-journey diagrams). Every report carries an evidence footer citing the exact
-evidence items behind each finding. Reports persist to `reports` table and
-are served from the dashboard.
+journey diagrams) and **PDF** (multi-page A4, see 6.9). Every report carries
+an evidence footer citing the exact evidence items behind each finding.
+Reports persist to `reports` table and are served from the dashboard (the
+PDF viewer embeds a data URL and offers a download).
 
 ### 6.6 Knowledge base (`knowledge.py`, `textsim.py`)
 
@@ -276,7 +277,7 @@ history so superseded entries remain auditable. **Works fully offline.**
 
 ### 6.7 Data & Access engines (sanctioned collection)
 
-**`robots.py` — robots.txt compliance (politeness, not evasion).** Each
+**`robots.py` — robots.txt compliance (politeness).** Each
 domain's robots.txt is fetched once per hour and applied with a declared
 User-Agent: readable file → followed; 404 → nothing disallowed; 401/400/403
 (unreadable) → safe default *disallowed*; network error → `unknown`
@@ -287,7 +288,7 @@ disallowed URL raises a PermissionGate (manual-evidence decision) — never a
 bypass.
 
 **`politeness.py` + `http_fetch.py` — polite HTTP capture.** A plain `httpx`
-GET (declared UA, no header spoofing, no stealth) with per-scope delay and
+GET (declared UA, no header spoofing) with per-scope delay and
 ETag / Last-Modified conditional re-requests: 304 or unchanged content-sha is
 a cache hit (`fetch_cache`) and the page is not re-processed. No rendering —
 JS-only content falls through to the browser path or the manual gate.
@@ -316,6 +317,36 @@ package (14 documents → 29 evidence, 28 pages, 98 features, 12 questions,
 29 observations, 2 sources, 7 contradictions). Integrity checks: evidence
 ref codes preserved, classes mapped C/S/I/H/U, every feature kept linked to
 its evidence refs.
+
+### 6.9 Plugins, PDF rendering, backups & portability (`plugins.py`, `pdf.py`, `export_import.py`)
+
+**`plugins.py` — modular plugin registry.** Four extensible component kinds:
+`ai_provider`, `browser_engine`, `report_format`, `analysis_module`. Built-ins
+register at boot (`discover()`, idempotent); third-party plugins install via
+the `rice.plugins` setuptools entry-point group, each a callable receiving the
+registry. A failing plugin is logged and skipped — it can never take the core
+down (the offline/no-provider guarantees hold). Exposed read-only at
+`GET /api/plugins`.
+
+**`pdf.py` — dependency-free PDF writer.** Builds valid multi-page A4 PDF 1.4
+(Helvetica / Helvetica-Bold) from the report markdown: headings, bullets,
+tables-as-text, code blocks, text wrapping, a 200-page hard cap, correct
+xref/startxref. No system libraries, no network — same local-first
+guarantee as the rest of the engine. Stored as a base64 data URL in the
+`reports` table; the raw `.pdf` is also written under
+`data/reports/<project>/`.
+
+**`export_import.py` — backups + project portability.** Backups WAL-checkpoint
+then copy the SQLite file into `data/backups/` (retention 20); Postgres
+deployments get an honest 503 pointing at the documented `pg_dump` path.
+Export serialises one project (pages, features, evidence, observations,
+questions, sources, scopes, data assets, reports) into a versioned JSON
+bundle; evidence references are normalised to positional indices so bundles
+are portable across installations. Import regenerates every id, remaps
+cross-references, and creates a fully isolated new project — robots
+exceptions and approvals deliberately do **not** travel (they require local
+re-approval). Endpoints: `POST /api/systems/backup`, `GET /api/systems/backups`,
+`GET /api/projects/{id}/export`, `POST /api/projects/import`.
 
 ## 7. Browser layer (`engine/browser/`)
 
@@ -365,8 +396,11 @@ The key never appears in logs, activity records, reports or evidence.
 
 ## 10. Frontend
 
-React 18 + TypeScript + Vite 5 + Tailwind 3 + Recharts, dark/gold theme.
-Nine sections, all wired to live API data with a global project selector:
+React 18 + TypeScript + Vite 5 + Tailwind 3 + Recharts, "Midnight & Copper"
+premium theme (deep midnight-blue base `#0d1322`, ivory text, restrained
+copper accent — deliberately **not** the near-black + gold cliché; the
+token *names* are unchanged, only the values, so every class keeps working).
+Ten sections, all wired to live API data with a global project selector:
 
 | Section | Data |
 |---|---|
@@ -377,8 +411,9 @@ Nine sections, all wired to live API data with a global project selector:
 | Browser Management | engine health (re-probe), profiles CRUD, session history with honest error reasons |
 | Knowledge Base | semantic search (scored, with the method explained), evidence explorer with C/S/I/H/U pills, feature relationship graph |
 | Analytics | coverage bars, category chart, contradictions, duplicates, missing info, opportunity ranking table with components |
-| Reports | generate (14 types × 4 formats), library, viewer (MD/CSV/JSON pre, HTML iframe) |
+| Reports | generate (14 types × 5 formats), library, viewer (MD/CSV/JSON pre, HTML/PDF iframe + download) |
 | GitHub Integration | connection state, commits, docs tree, sync action, write-back policy |
+| Data & Ops | create + list database backups, plugin registry by kind, project export (JSON bundle download) + import as new isolated project |
 
 Serving: dev = Vite `:5173` proxying `/api` + `/data` to `:8787`;
 production = the FastAPI app serves `frontend/dist` with SPA fallback at a
@@ -394,13 +429,16 @@ single origin (no CORS needed). All client URLs are relative.
 - **Safety caps:** 250-iteration agent loop cap with loud failure; per-scope
   page caps (excess fetch subtasks are *skipped with an explanation*);
   retry caps with backoff; import row caps.
-- **Tests:** 49 tests — page understanding (9), analytics (10), reports (6),
+- **Tests:** 57 tests — page understanding (9), analytics (10), reports (6),
   knowledge (4), evidence import vs the real package (1), agent e2e (4: full
   pipeline, gate→decision→reject→skip, loud failure, recovery), API (4),
   data & access (11: ETag/304 cache, robots gate, robots-exception approval,
   page-cap skip, full HTTP pipeline, dataset import × formats, connector
   flow + credential hygiene + missing-env honesty, manual capture + batch,
-  manual queue + robots check). Evidence in `docs/platform/ACCEPTANCE.md`.
+  manual queue + robots check), data & ops (8: PDF structure + text
+  round-trip, PDF render_report, plugin registry built-ins + errors, plugin
+  isolation, backup endpoint, export/import remapping round-trip, bad-bundle
+  rejection, plugins endpoint shape). Evidence in `docs/platform/ACCEPTANCE.md`.
 
 ## 12. Configuration (env, prefix `RICE_`)
 

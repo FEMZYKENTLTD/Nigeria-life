@@ -8,20 +8,20 @@
 
 html,
 body {
-  background: #0a0a0c;
-  color: #e8e6df;
+  background: #0d1322;
+  color: #ece7db;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a33 transparent;
+  scrollbar-color: #283453 transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2a2a33;
+  background: #283453;
   border-radius: 4px;
 }
 

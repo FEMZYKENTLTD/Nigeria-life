@@ -19,7 +19,8 @@ pipeline — the same pipeline any future project uses.
 3. Honest failure: a failed browser task is persisted with its reason; the UI
    says what failed and what remains incomplete. No silent drops.
 4. Permissions: research scope and collection permissions are per-project,
-   enforced by the scheduler. No stealth, no evasion, no credential storage.
+   enforced by the scheduler. Collection is declared and permission-gated;
+   credentials are never stored.
    Manual evidence import is the sanctioned path for restricted sources.
 5. Multi-project: projects are fully isolated (tasks, agents, evidence,
    reports); the core is shared.
@@ -154,6 +155,39 @@ decision instead):
   (methods / delay / cap / robots posture / note) read by the agent before
   every fetch; visible and editable in the dashboard (Data & Access).
 - [x] Tests: `tests/test_access.py` (11) — suite total 49 passed.
+
+## Stage 8 — Premium theme + extensibility, offline document output, portability ✅
+
+The "extremely advanced and exceptionally functional" increment — delivered
+within the standing constraints (honest failure, local-first, no hardcoded
+target; collection stays declared, permission-gated and auditable).
+
+- [x] **Premium theme swap (not gold/black).** "Midnight & Copper" palette
+  (midnight-blue base, ivory text, copper accent) applied by changing token
+  *values* only, in `tailwind.config.js`, `src/theme.css`, `components/ui.tsx`,
+  the extension `styles.css` and the report HTML/PDF templates — so no
+  component logic changed. `npm run build` clean.
+- [x] **Plugin architecture** — `engine/plugins.py` registry with four
+  extensible kinds (`ai_provider`, `browser_engine`, `report_format`,
+  `analysis_module`). Built-ins register at boot; third-party plugins via the
+  `rice.plugins` entry-point group; a failing plugin is logged and skipped
+  (can't take the core down). Read-only `GET /api/plugins` + a dashboard
+  panel.
+- [x] **PDF report format** — `engine/pdf.py`, a dependency-free multi-page
+  A4 PDF 1.4 writer (Helvetica/Helvetica-Bold, correct xref/startxref,
+  200-page cap). Added as a 5th report format end-to-end (generator → data
+  URL in `reports` → `.pdf` on disk → dashboard viewer + download).
+- [x] **Database backups** — `POST /api/systems/backup` (WAL checkpoint +
+  consistent copy, retention 20) and `GET /api/systems/backups`; Postgres
+  deployments get an honest 503 pointing at the documented `pg_dump` path.
+- [x] **Project export/import (portability)** — `GET /api/projects/{id}/export`
+  (versioned JSON bundle; evidence refs normalised to positional indices) and
+  `POST /api/projects/import` (fresh ids, remapped cross-references, fully
+  isolated new project; robots exceptions/approvals deliberately do not
+  travel).
+- [x] **Dashboard: Data & Ops section** — backup create/list, plugin
+  registry by kind, project export (download) + import (new isolated project).
+- [x] Tests: `tests/test_dataops.py` (8) — suite total **57 passed**.
 
 ## What is NOT claimed
 

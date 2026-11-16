@@ -136,7 +136,49 @@ Live verification (seeded project, real server):
   network reason — the engine does not guess and does not block;
 - full regression: the original 38 tests still pass alongside the new 11.
 
-## 6. Constraints honored (spot checks)
+## 6. Premium theme + Stage 8 increment (PDF, plugin registry, backups & portability)
+
+Theme: the gold-on-black palette was replaced with "Midnight & Copper"
+(deep midnight-blue `#0d1322` base, ivory `#ece7db` text, copper
+`#c17d4f`/`#e3ab84` accents). Token *names* (`ink/panel/line/gold…`) are
+unchanged — only values — in `tailwind.config.js`, `src/theme.css`,
+`ui.tsx`, the extension `styles.css` and the report HTML/PDF templates, so
+no component code changed. Verified: `npm run build` clean (tsc + vite,
+651 kB JS / 18.8 kB CSS); served SPA returns 200 with the new CSS.
+
+Command: `cd platform/backend && .venv/bin/python -m pytest tests/ -q`
+
+```
+57 passed in 39.00s
+```
+
+New: `tests/test_dataops.py` — **8 passed**:
+
+| Test | Proves |
+|---|---|
+| `test_pdf_valid_structure_and_text` | `%PDF-1.4` header, `%%EOF`, `startxref` offset points at the real xref table, emitted text recoverable, 200-page cap |
+| `test_pdf_render_report_roundtrip` | `render_report("executive", …, "pdf")` → base64 data URL → decodes to a valid PDF containing the report title |
+| `test_plugin_registry_builtins_and_errors` | built-ins registered for all 4 kinds (incl. `report_format/pdf`, all analysis modules); idempotent discovery; informative errors listing what IS available |
+| `test_plugin_isolation_bad_external_cannot_break_core` | a broken plugin registration can't shadow or break built-in resolution |
+| `test_backup_endpoint_creates_consistent_copy` | `POST /api/systems/backup` → WAL checkpoint + file in `data/backups/` with size; listed by `GET /api/systems/backups` |
+| `test_export_import_roundtrip_remapping` | export a 2-page/1-feature/2-evidence project → bundle v1 with **positional evidence refs** → import → new project id, counts match, feature references a **fresh** evidence id, original untouched |
+| `test_import_rejects_bad_bundles` | empty object / wrong version / missing project name all refused with 400 |
+| `test_plugins_endpoint_shape` | `GET /api/plugins` returns exactly the 4 kinds with `off` and `pdf` present |
+
+Live verification (seeded Lagos Life project, real server on :8787):
+
+- `POST /reports/generate {"type":"executive","format":"pdf"}` → 11.9 KB PDF,
+  3 pages, xref verified, Helvetica/Helvetica-Bold, on disk under
+  `data/reports/<project>/`;
+- `POST /api/systems/backup` → `backups/rice-*.db` (612 KB) listed by the
+  backups endpoint;
+- `GET /api/projects/{id}/export` → 12-key version-1 bundle (28 pages,
+  98 features, 29 evidence, positional refs); `POST /api/projects/import`
+  recreated it as a fully isolated project with remapped ids;
+- `GET /api/plugins` lists all built-ins; full regression: the original 49
+  tests still pass alongside the new 8.
+
+## 7. Constraints honored (spot checks)
 
 - No target/product/feature name appears in `platform/backend/app/`
   (grep-clean; Lagos Life exists only as data).
@@ -147,7 +189,7 @@ Live verification (seeded project, real server):
 - `.gitignore` keeps `platform/data/`, `node_modules/`, `dist/`, `.venv/`
   out of the source tree; runtime data stays local-first.
 
-## 7. Not verified here (honest gap list)
+## 8. Not verified here (honest gap list)
 
 | Item | Why | Mitigation |
 |---|---|---|

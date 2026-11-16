@@ -59,10 +59,26 @@ class Base(DeclarativeBase):
 
 # ---------------------------------------------------------------- projects & config
 
+class Profile(Base):
+    """A human user (multi-user mode). Keyed by the Supabase auth user id.
+    In local mode the synthetic id "local" acts as the single admin."""
+    __tablename__ = "profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True, default=None)
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    role: Mapped[str] = mapped_column(String(16), default="member")  # admin | member
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
 class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    # multi-user ownership: the profile id of the creating user; NULL for
+    # legacy / local-mode projects (visible to admins and the local operator)
+    owner_id: Mapped[str | None] = mapped_column(String(36), index=True, default=None)
     name: Mapped[str] = mapped_column(String(200), unique=True)
     slug: Mapped[str] = mapped_column(String(220), unique=True)
     description: Mapped[str] = mapped_column(Text, default="")

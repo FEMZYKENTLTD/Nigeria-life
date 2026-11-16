@@ -33,6 +33,14 @@ async def lifespan(app: FastAPI):
     s = get_settings()
     os.makedirs(s.data_dir, exist_ok=True)
     await bootstrap_async()
+    # plugin discovery: built-ins + any installed rice.plugins entry points
+    try:
+        from .engine.plugins import discover
+
+        for name in discover():
+            log.info("plugin registered: %s", name)
+    except Exception as e:  # plugins must never block boot
+        log.warning("plugin discovery failed: %s", e)
     # task recovery: re-queue tasks left running by an interrupted process
     try:
         from sqlalchemy import select
