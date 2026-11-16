@@ -30,6 +30,10 @@ Local development is unchanged: no env → SQLite + single local operator.
 
 ## 1. Supabase
 
+> **Status (2026-11-15):** not created yet — the org's free plan is at its
+> 2-project limit (`femzyk-fleet`, `klc-cbt`). Free one of those slots (pause
+> one) or upgrade the plan, then follow these steps.
+
 1. **Create the project** (supabase.com/dashboard → New project).
 2. **Boot the engine once** against this project's database so it creates its
    schema (any container host, or the steps below with a temporary DB URL).
@@ -92,11 +96,16 @@ Environment reference:
 
 ## 3. Vercel
 
-1. **Add the project** in the Vercel dashboard:
-   * Repository: `FEMZYKENTLTD/Nigeria-life`
-   * Framework preset: **Other** (static build)
-   * Root directory: `platform/frontend`
-   * Build command: `npm run build` · Output directory: `dist`
+> **Status (2026-11-15):** the project **`nigeria-life`** already exists in the
+> `fan-card` team, linked to `FEMZYKENTLTD/Nigeria-life` (production branch
+> `main`, root `platform/frontend`, build `npm run build`, output `dist`).
+> Auto-deployments are disabled on this team, so the **first deployment needs
+> one manual trigger** in the Vercel dashboard (or enable auto-deployments on
+> the project after that).
+
+1. **First deployment:** Vercel dashboard → `nigeria-life` → *Deploy* (or
+   Settings → Git → enable "Auto Deploy"). It builds from `main`, so it picks
+   up the platform code once PR #3 is merged.
 2. **Environment variables** (all environments):
 
    | Variable | Value |
@@ -110,7 +119,23 @@ Environment reference:
    everything else → `index.html` (SPA).
 4. **Custom domain** (optional) → set it as the **Site URL** in Supabase Auth.
 
-## 4. Smoke test
+## 4. Branch protection on `main` (one-time)
+
+The CI gate is active; to make it binding, set the protection rule once in
+the GitHub web UI (the arena integration token cannot write branch rules):
+
+1. GitHub → `FEMZYKENTLTD/Nigeria-life` → **Settings** → **Branches** →
+   **Add branch protection rule** → pattern `main`.
+2. Tick:
+   * **Require status checks to pass before merging** → select
+     `backend-pytest` and `frontend-build` → also tick
+     "Require branches to be up to date before merging".
+   * **Do not allow force pushes**, **Do not allow deletions**.
+   * **Include administrators** (so nobody can bypass the gate).
+3. Save. From then on, nothing lands on `main` unless the whole suite is
+   green.
+
+## 5. Smoke test
 
 ```sh
 curl -s $RICE_API_BASE/api/health
@@ -123,7 +148,7 @@ curl -s $RICE_API_BASE/api/health
    scraping volume and lets you drill into what they scraped and got.
 4. Members see only their own projects; other users' project ids 404.
 
-## 5. Upgrading
+## 6. Upgrading
 
 1. Merge to `main` (CI must be green — branch protection enforces it).
 2. Rebuild + redeploy the engine container. The schema migrator
